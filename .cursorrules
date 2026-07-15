@@ -1,0 +1,10 @@
+You are an expert full-stack developer. 
+Project: "Splitnito" - Expense splitting web app for business partners.
+Tech Stack: Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui for UI components, Supabase for Database/Auth, Mindee API for OCR.
+
+Rules:
+- Always use Next.js App Router conventions.
+- Use shadcn/ui components whenever possible. Install them using `npx shadcn@latest add <component>` when needed.
+- Write clean, modular, well-typed TypeScript code.
+- Focus on mobile-first, clean, minimalist design (dark or light mode).
+- Always use the brand name "Splitnito" in UI copy.
