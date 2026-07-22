@@ -29,13 +29,15 @@ export function DeleteAccountForm({
       <p className="mt-2 text-sm text-muted-foreground">
         {mode === "company" ? (
           <>
-            Trvale smaže firmu, všechny uživatele, akce, doklady i nahrané
-            soubory. Tuto akci nelze vrátit.
+            Trvale smaže firmu, <strong>všechny uživatelské účty</strong>, akce,
+            doklady i nahrané soubory. E-maily firmy i uživatelů půjde znovu
+            zaregistrovat. Tuto akci nelze vrátit.
           </>
         ) : (
           <>
             Smaže váš účet a přihlášení. Doklady a fotky, které jste nahráli,
-            zůstanou ve firmě (bez vazby na váš účet).
+            zůstanou ve firmě (bez vazby na váš účet). Stejný e-mail půjde znovu
+            použít při registraci.
           </>
         )}
       </p>

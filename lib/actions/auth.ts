@@ -257,6 +257,12 @@ export async function removeMemberAction(
     return { error: error.message };
   }
 
+  // Záloha: Admin API uvolní e-mail i když SQL auth wipe selže
+  const admin = createServiceClient();
+  if (admin) {
+    await admin.auth.admin.deleteUser(userId).catch(() => undefined);
+  }
+
   revalidatePath("/company");
   return { success: "Uživatel byl odstraněn." };
 }
@@ -285,6 +291,9 @@ export async function deleteAccountAction(
     return { error: "Profil nenalezen." };
   }
 
+  // ID všech auth účtů, které musí zmizet (firma = všichni ve firmě)
+  let authUserIds: string[] = [user.id];
+
   if (profile.role === "company") {
     const { data: company } = await supabase
       .from("companies")
@@ -299,7 +308,16 @@ export async function deleteAccountAction(
       };
     }
 
-    // Smazat všechny soubory ve storage firmy (vyžaduje SERVICE_ROLE)
+    const { data: members } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id", profile.company_id);
+
+    authUserIds = (members ?? []).map((m) => m.id);
+    if (!authUserIds.includes(user.id)) {
+      authUserIds.push(user.id);
+    }
+
     const { data: events } = await supabase
       .from("events")
       .select("id")
@@ -318,7 +336,6 @@ export async function deleteAccountAction(
 
       const admin = createServiceClient();
       if (admin && paths.length > 0) {
-        // Storage remove max ~1000; batch
         for (let i = 0; i < paths.length; i += 100) {
           await admin.storage.from("receipts").remove(paths.slice(i, i + 100));
         }
@@ -326,7 +343,7 @@ export async function deleteAccountAction(
     }
   } else if (confirm.toUpperCase() !== "SMAZAT") {
     return {
-      error: 'Pro smazání účtu napište SMAZAT do potvrzovacího pole.',
+      error: "Pro smazání účtu napište SMAZAT do potvrzovacího pole.",
     };
   }
 
@@ -336,10 +353,20 @@ export async function deleteAccountAction(
     if (/Could not find the function|schema cache/i.test(error.message)) {
       return {
         error:
-          "V Supabase chybí funkce delete_own_account. Spusťte SQL supabase/migration_delete_account.sql.",
+          "V Supabase chybí funkce delete_own_account. Spusťte SQL supabase/migration_delete_account_emails.sql.",
       };
     }
     return { error: error.message };
+  }
+
+  // Admin API: jistota, že e-maily (firma i všichni uživatelé) jdou znovu registrovat
+  const admin = createServiceClient();
+  if (admin) {
+    await Promise.all(
+      authUserIds.map((id) =>
+        admin.auth.admin.deleteUser(id).catch(() => undefined)
+      )
+    );
   }
 
   await supabase.auth.signOut();
