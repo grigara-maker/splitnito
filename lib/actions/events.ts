@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { calculateSettlement } from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 import type { Json, ReceiptItem } from "@/lib/types/database";
+import { normalizeReceiptItems } from "@/lib/types/database";
 
 export type ActionState = {
   error?: string;
@@ -83,19 +84,13 @@ export async function createReceiptAction(
 
   let items: ReceiptItem[] | null = null;
   if (itemsRaw) {
-    items = itemsRaw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const match = line.match(/^(.*?)(?:\s+[-–]?\s*(\d+[.,]?\d*))?$/);
-        return {
-          name: match?.[1]?.trim() || line,
-          amount: match?.[2]
-            ? Number(match[2].replace(",", "."))
-            : undefined,
-        };
-      });
+    try {
+      const parsed = JSON.parse(itemsRaw) as unknown;
+      const normalized = normalizeReceiptItems(parsed);
+      items = normalized.length > 0 ? normalized : null;
+    } catch {
+      return { error: "Neplatný formát položek." };
+    }
   }
 
   const { supabase, user } = await requireProfile();

@@ -205,5 +205,50 @@ export type Settlement = Database["public"]["Tables"]["settlements"]["Row"];
 
 export type ReceiptItem = {
   name: string;
-  amount?: number;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
 };
+
+/** Normalize legacy `{ name, amount }` and partial OCR payloads. */
+export function normalizeReceiptItem(raw: unknown): ReceiptItem | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const name = String(obj.name ?? "").trim();
+  if (!name) return null;
+
+  const quantityRaw = Number(obj.quantity ?? obj.qty ?? 1);
+  const quantity =
+    Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : 1;
+
+  const unitFromField = Number(obj.unitPrice ?? obj.unit_price);
+  const totalFromField = Number(
+    obj.totalPrice ?? obj.total_amount ?? obj.amount
+  );
+
+  let unitPrice = Number.isFinite(unitFromField) ? unitFromField : NaN;
+  let totalPrice = Number.isFinite(totalFromField) ? totalFromField : NaN;
+
+  if (!Number.isFinite(unitPrice) && Number.isFinite(totalPrice)) {
+    unitPrice = totalPrice / quantity;
+  }
+  if (!Number.isFinite(totalPrice) && Number.isFinite(unitPrice)) {
+    totalPrice = unitPrice * quantity;
+  }
+  if (!Number.isFinite(unitPrice)) unitPrice = 0;
+  if (!Number.isFinite(totalPrice)) totalPrice = unitPrice * quantity;
+
+  return {
+    name,
+    quantity: Math.round(quantity * 1000) / 1000,
+    unitPrice: Math.round(unitPrice * 100) / 100,
+    totalPrice: Math.round(totalPrice * 100) / 100,
+  };
+}
+
+export function normalizeReceiptItems(raw: unknown): ReceiptItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(normalizeReceiptItem)
+    .filter((item): item is ReceiptItem => item != null);
+}

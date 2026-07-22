@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { normalizeReceiptItems } from "@/lib/types/database";
 
 type OcrResult = {
   vendor: string | null;
   totalAmount: number | null;
-  items: Array<{ name: string; amount?: number }>;
+  items: Array<{
+    name: string;
+    quantity?: number;
+    unitPrice?: number;
+    totalPrice?: number;
+    amount?: number;
+  }>;
 };
 
 type GeminiResponse = {
@@ -70,12 +77,21 @@ export async function POST(request: Request) {
   const prompt = `You are reading a Czech or international receipt / invoice photo.
 Extract structured data and respond ONLY with JSON matching this schema:
 {
-  "vendor": string | null,       // merchant / supplier name (e.g. "Albert")
-  "totalAmount": number | null,  // final amount to pay, as a number (no currency symbol)
-  "items": [{"name": string, "amount": number}]  // optional line items; empty array if unknown
+  "vendor": string | null,
+  "totalAmount": number | null,
+  "items": [
+    {
+      "name": string,
+      "quantity": number,
+      "unitPrice": number,
+      "totalPrice": number
+    }
+  ]
 }
 Rules:
 - totalAmount must be the grand total (including tax if shown as final payment).
+- quantity = number of pieces/units (default 1 if unknown).
+- unitPrice = price per unit; totalPrice = quantity * unitPrice (or line total on receipt).
 - Use a dot as decimal separator.
 - If a field is unreadable, use null (or [] for items).
 - Do not invent values.`;
@@ -190,15 +206,7 @@ Rules:
   }
 
   const items = Array.isArray(parsed.items)
-    ? parsed.items
-        .map((item) => ({
-          name: String(item?.name ?? "Položka").trim() || "Položka",
-          amount:
-            typeof item?.amount === "number" && !Number.isNaN(item.amount)
-              ? item.amount
-              : undefined,
-        }))
-        .filter((item) => item.name)
+    ? normalizeReceiptItems(parsed.items)
     : [];
 
   return NextResponse.json({

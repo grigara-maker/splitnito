@@ -40,7 +40,7 @@ export default async function EventPage({
 
   const { data: receiptsRaw } = await supabase
     .from("receipts")
-    .select("id, vendor, total_amount, created_at, image_url, user_id")
+    .select("id, vendor, total_amount, created_at, image_url, user_id, items")
     .eq("event_id", id)
     .order("created_at", { ascending: false });
 

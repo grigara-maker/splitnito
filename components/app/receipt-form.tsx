@@ -1,16 +1,46 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 
 import { createReceiptAction, type ActionState } from "@/lib/actions/events";
 import { createClient } from "@/lib/supabase/client";
+import type { ReceiptItem } from "@/lib/types/database";
+import { normalizeReceiptItems } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 const initial: ActionState = {};
+
+type DraftItem = {
+  key: string;
+  name: string;
+  quantity: string;
+  unitPrice: string;
+  totalPrice: string;
+};
+
+function emptyItem(): DraftItem {
+  return {
+    key: crypto.randomUUID(),
+    name: "",
+    quantity: "1",
+    unitPrice: "",
+    totalPrice: "",
+  };
+}
+
+function toDraft(items: ReceiptItem[]): DraftItem[] {
+  if (items.length === 0) return [emptyItem()];
+  return items.map((item) => ({
+    key: crypto.randomUUID(),
+    name: item.name,
+    quantity: String(item.quantity),
+    unitPrice: String(item.unitPrice),
+    totalPrice: String(item.totalPrice),
+  }));
+}
 
 export function ReceiptForm({ eventId }: { eventId: string }) {
   const [state, formAction, pending] = useActionState(
@@ -19,12 +49,56 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
   );
   const [vendor, setVendor] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
-  const [items, setItems] = useState("");
+  const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
   const [imageUrl, setImageUrl] = useState("");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.success) {
+      setVendor("");
+      setTotalAmount("");
+      setItems([emptyItem()]);
+      setImageUrl("");
+      setOcrWarning(null);
+      setUploadError(null);
+      formRef.current?.reset();
+    }
+  }, [state.success]);
+
+  function updateItem(
+    key: string,
+    field: keyof Omit<DraftItem, "key">,
+    value: string
+  ) {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.key !== key) return item;
+        const next = { ...item, [field]: value };
+
+        if (field === "quantity" || field === "unitPrice") {
+          const qty = Number(String(next.quantity).replace(",", "."));
+          const unit = Number(String(next.unitPrice).replace(",", "."));
+          if (Number.isFinite(qty) && Number.isFinite(unit) && qty > 0) {
+            next.totalPrice = String(Math.round(qty * unit * 100) / 100);
+          }
+        }
+
+        if (field === "totalPrice") {
+          const qty = Number(String(next.quantity).replace(",", "."));
+          const total = Number(String(next.totalPrice).replace(",", "."));
+          if (Number.isFinite(qty) && qty > 0 && Number.isFinite(total)) {
+            next.unitPrice = String(Math.round((total / qty) * 100) / 100);
+          }
+        }
+
+        return next;
+      })
+    );
+  }
 
   async function handleFile(file: File) {
     setUploadError(null);
@@ -56,7 +130,6 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
       const json = await res.json();
 
       if (!res.ok) {
-        // Obrázek už je nahraný — OCR je jen pomocné předvyplnění
         setOcrWarning(
           json.error ??
             "OCR se nepodařilo. Doklad můžete vyplnit ručně a uložit."
@@ -67,16 +140,7 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
       if (json.vendor) setVendor(json.vendor);
       if (json.totalAmount != null) setTotalAmount(String(json.totalAmount));
       if (Array.isArray(json.items) && json.items.length > 0) {
-        setItems(
-          json.items
-            .map((item: { name?: string; amount?: number }) =>
-              item.amount != null
-                ? `${item.name ?? "Položka"} ${item.amount}`
-                : (item.name ?? "")
-            )
-            .filter(Boolean)
-            .join("\n")
-        );
+        setItems(toDraft(normalizeReceiptItems(json.items)));
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Nahrání selhalo");
@@ -86,10 +150,25 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
     }
   }
 
+  const itemsJson = JSON.stringify(
+    items
+      .filter((item) => item.name.trim())
+      .map((item) => ({
+        name: item.name.trim(),
+        quantity: Number(String(item.quantity).replace(",", ".")) || 1,
+        unitPrice: Number(String(item.unitPrice).replace(",", ".")) || 0,
+        totalPrice:
+          Number(String(item.totalPrice).replace(",", ".")) ||
+          (Number(String(item.quantity).replace(",", ".")) || 1) *
+            (Number(String(item.unitPrice).replace(",", ".")) || 0),
+      }))
+  );
+
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form ref={formRef} action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="imageUrl" value={imageUrl} />
+      <input type="hidden" name="items" value={itemsJson} />
 
       <div className="flex flex-col gap-2">
         <Label>Fotka / soubor účtenky</Label>
@@ -148,16 +227,87 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
           placeholder="1250.50"
         />
       </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="items">Položky (volitelné, jedna na řádek)</Label>
-        <Textarea
-          id="items"
-          name="items"
-          value={items}
-          onChange={(e) => setItems(e.target.value)}
-          placeholder={"Káva 89\nOběd 320"}
-          rows={4}
-        />
+
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Položky (volitelné)</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setItems((prev) => [...prev, emptyItem()])}
+          >
+            <Plus />
+            Přidat položku
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {items.map((item, index) => (
+            <div
+              key={item.key}
+              className="grid gap-2 rounded-xl bg-muted/40 p-3 ring-1 ring-foreground/5 sm:grid-cols-[1.4fr_0.7fr_0.9fr_0.9fr_auto]"
+            >
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">
+                  Název {index + 1}
+                </span>
+                <Input
+                  value={item.name}
+                  onChange={(e) => updateItem(item.key, "name", e.target.value)}
+                  placeholder="Káva"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Počet</span>
+                <Input
+                  inputMode="decimal"
+                  value={item.quantity}
+                  onChange={(e) =>
+                    updateItem(item.key, "quantity", e.target.value)
+                  }
+                  placeholder="1"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Cena / ks</span>
+                <Input
+                  inputMode="decimal"
+                  value={item.unitPrice}
+                  onChange={(e) =>
+                    updateItem(item.key, "unitPrice", e.target.value)
+                  }
+                  placeholder="89"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Cena celkem</span>
+                <Input
+                  inputMode="decimal"
+                  value={item.totalPrice}
+                  onChange={(e) =>
+                    updateItem(item.key, "totalPrice", e.target.value)
+                  }
+                  placeholder="89"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Odstranit položku"
+                  disabled={items.length === 1}
+                  onClick={() =>
+                    setItems((prev) => prev.filter((row) => row.key !== item.key))
+                  }
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {state.error ? (
