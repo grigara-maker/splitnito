@@ -63,11 +63,27 @@ export async function registerAction(
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: { name },
+    },
   });
 
   if (signUpError || !signUpData.user) {
+    const message = signUpError?.message ?? "Registraci se nepodařilo dokončit.";
+    if (/invalid path/i.test(message)) {
+      return {
+        error:
+          "Špatná Supabase URL. V nastavení musí být jen https://XXXX.supabase.co (bez /rest/v1).",
+      };
+    }
+    return { error: message };
+  }
+
+  // Email confirmation zapnutá → není session → RLS insert selže
+  if (!signUpData.session) {
     return {
-      error: signUpError?.message ?? "Registraci se nepodařilo dokončit.",
+      error:
+        "Účet byl vytvořen, ale e-mail vyžaduje potvrzení. Ve Supabase vypněte Auth → Providers → Email → Confirm email, nebo potvrďte e-mail a pak se přihlaste.",
     };
   }
 
@@ -85,6 +101,13 @@ export async function registerAction(
     );
 
     if (inviteError || !companies?.length) {
+      const message = inviteError?.message ?? "";
+      if (/invalid path/i.test(message)) {
+        return {
+          error:
+            "Špatná Supabase URL. Použijte Project URL bez /rest/v1 (Settings → API).",
+        };
+      }
       return { error: "Invite kód není platný." };
     }
 
@@ -101,11 +124,16 @@ export async function registerAction(
       .single();
 
     if (companyError || !company) {
-      return {
-        error:
-          companyError?.message ??
-          "Firmu se nepodařilo vytvořit. Zkontrolujte databázi.",
-      };
+      const message =
+        companyError?.message ??
+        "Firmu se nepodařilo vytvořit. Zkontrolujte databázi.";
+      if (/invalid path/i.test(message)) {
+        return {
+          error:
+            "Špatná Supabase URL. Použijte Project URL bez /rest/v1 (Settings → API).",
+        };
+      }
+      return { error: message };
     }
 
     companyId = company.id;
