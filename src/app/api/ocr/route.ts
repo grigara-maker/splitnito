@@ -90,13 +90,13 @@ Extract structured data and respond ONLY with JSON matching this schema:
     }
   ]
 }
-CRITICAL — always use amounts INCLUDING VAT (DPH / tax):
-- On Czech invoices you often see both "Celkem" / "Celkem cena" (without VAT) AND "Celkem s DPH" / "Celkem k úhradě" / "Celková cena s DPH". ALWAYS pick the amount WITH DPH (the final amount to pay).
-- NEVER use the net / without-VAT total when a with-VAT total is present.
-- Prefer labels in this order: "Celkem k úhradě", "Celkem s DPH", "Celková cena s DPH", "K platbě", "Grand total", then other final payment totals.
-- Ignore "Celkem bez DPH", "Základ DPH", "Celkem cena" without DPH when a with-DPH figure exists.
-- Item unitPrice and totalPrice must also be WITH DPH when the receipt shows both. If only one price is shown, use that.
-- After extracting, mentally check: totalAmount should match the sum of item totalPrices within ~1 CZK when items are complete; if not, re-check you used the with-DPH totals.
+CRITICAL — always use amounts INCLUDING VAT (DPH / tax). This is mandatory:
+- Czech invoices often show TWO totals side by side, e.g. "Cena celkem" / "Celkem" NEXT TO "Cena s DPH" / "Celkem s DPH". Even if "Cena celkem" looks like the final amount, it is usually WITHOUT VAT. ALWAYS take "Cena s DPH" / "Celkem s DPH" / "Celková cena s DPH".
+- Never prefer "Cena celkem", "Celkem cena", "Celkem bez DPH", "Základ", or "Netto" when any with-DPH figure exists on the document.
+- Prefer labels in this exact priority: "Cena s DPH", "Celkem s DPH", "Celková cena s DPH", "Celkem k úhradě", "K platbě", "Grand total (incl. VAT)", then other WITH-VAT totals.
+- Only if the document has NO with-DPH amount at all, fall back to a single shown total.
+- Item unitPrice and totalPrice must also be WITH DPH when both net and gross are shown.
+- Sanity check: if you see both a smaller "Cena celkem" and a larger "Cena s DPH", totalAmount MUST be the larger with-DPH value.
 Other rules:
 - purchasedAt = date and time of purchase printed on the receipt (NOT upload time), ISO-8601 like "2024-03-15T14:32:00". If only a date is visible, use noon local time. If unreadable, null.
 - quantity = number of pieces/units (default 1 if unknown).
