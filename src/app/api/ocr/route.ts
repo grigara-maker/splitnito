@@ -8,6 +8,12 @@ type OcrResult = {
   items: Array<{ name: string; amount?: number }>;
 };
 
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+  }>;
+};
+
 /**
  * Free-tier limity (Google AI Studio): gemini-2.0-flash má často 0/0 → 429.
  * Preferuj 2.5 / 3.x Flash Lite, které mají reálnou RPD kvótu.
@@ -97,11 +103,7 @@ Rules:
 
   let lastStatus = 0;
   let lastText = "";
-  let data: {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
-  } | null = null;
+  let data: GeminiResponse | null = null;
 
   for (const model of GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -116,7 +118,7 @@ Rules:
 
     if (response.ok) {
       try {
-        data = JSON.parse(lastText) as typeof data;
+        data = JSON.parse(lastText) as GeminiResponse;
       } catch {
         data = null;
       }
