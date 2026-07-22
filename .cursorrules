@@ -8,3 +8,4 @@ Rules:
 - Write clean, modular, well-typed TypeScript code.
 - Focus on mobile-first, clean, minimalist design (dark or light mode).
 - Always use the brand name "Splitnito" in UI copy.
+- After finishing a change (unless the user says otherwise), automatically create a git commit and push to origin.
