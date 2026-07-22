@@ -1,6 +1,6 @@
 You are an expert full-stack developer. 
 Project: "Splitnito" - Expense splitting web app for business partners.
-Tech Stack: Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui for UI components, Supabase for Database/Auth, Mindee API for OCR.
+Tech Stack: Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui for UI components, Supabase for Database/Auth, Google Gemini API for OCR.
 
 Rules:
 - Always use Next.js App Router conventions.

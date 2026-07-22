@@ -8,7 +8,7 @@ Aplikace pro snadné vyúčtování společných firemních nákladů a nákupů
 
 - **Databáze & Auth:** Supabase (PostgreSQL).
 
-- **OCR (Čtení účtenek):** Mindee API (Free Tier - 250 dokladů/měsíc).
+- **OCR (Čtení účtenek):** Google Gemini API (`gemini-2.0-flash`).
 
 - **QR Platby:** Knihovna generující CZ standard SPAYD (QR Platba).
 
@@ -98,13 +98,13 @@ Aplikace pro snadné vyúčtování společných firemních nákladů a nákupů
 
 - Možnost upravit si vlastní profil (změna jména, IBANu).
 
-### [ ] FÁZE 3: Zapisování výdajů (Ruční + Mindee OCR)
+### [ ] FÁZE 3: Zapisování výdajů (Ruční + Gemini OCR)
 
 - Formulář pro přidání dokladu přiřazeného k vybrané aktivní Akci.
 
 - Povinná pole: Dodavatel, Celková částka. Nepovinné: rozpis položek.
 
-- Tlačítko "Vyfotit/Nahrát účtenku" -> integrace s Mindee API, které vytáhne dodavatele, částku a datum a předvyplní formulář.
+- Tlačítko "Vyfotit/Nahrát účtenku" -> integrace s Google Gemini API, které vytáhne dodavatele, částku a předvyplní formulář.
 
 ### [ ] FÁZE 4: Přehledy a Dashboard akce
 
