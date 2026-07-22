@@ -217,7 +217,11 @@ export function ReceiptsOverview({
         }}
       >
         <DialogContent
-          className={editing ? "sm:max-w-2xl" : "sm:max-w-lg"}
+          className={
+            editing
+              ? "max-w-[calc(100%-1.5rem)] sm:max-w-2xl"
+              : "max-w-[calc(100%-1.5rem)] sm:max-w-lg"
+          }
           showCloseButton
         >
           {selected && purchaseWhen && uploadedWhen ? (
@@ -262,7 +266,7 @@ export function ReceiptsOverview({
                   </DialogDescription>
                 </DialogHeader>
 
-                <dl className="grid grid-cols-2 gap-3 text-sm">
+                <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                   <div>
                     <dt className="text-muted-foreground">Datum nákupu</dt>
                     <dd className="font-medium">{purchaseWhen.date}</dd>
@@ -271,19 +275,19 @@ export function ReceiptsOverview({
                     <dt className="text-muted-foreground">Čas nákupu</dt>
                     <dd className="font-medium">{purchaseWhen.time}</dd>
                   </div>
-                  <div>
+                  <div className="min-w-0 sm:col-span-2">
                     <dt className="text-muted-foreground">Nahráno do Splitnito</dt>
-                    <dd className="font-medium">
+                    <dd className="font-medium break-words">
                       {uploadedWhen.date} · {uploadedWhen.time}
                     </dd>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <dt className="text-muted-foreground">Dodavatel</dt>
-                    <dd className="font-medium">{selected.vendor}</dd>
+                    <dd className="font-medium break-words">{selected.vendor}</dd>
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-w-0 sm:col-span-2">
                     <dt className="text-muted-foreground">Celkem</dt>
-                    <dd className="flex items-center gap-2 font-medium">
+                    <dd className="flex flex-wrap items-center gap-2 font-medium">
                       {formatCzk(Number(selected.total_amount))}
                       {selectedItems.length > 0 &&
                       amountsMismatch(
@@ -291,7 +295,7 @@ export function ReceiptsOverview({
                         Number(selected.total_amount)
                       ) ? (
                         <span className="inline-flex items-center gap-1 text-xs text-destructive">
-                          <AlertTriangle className="size-3.5" />
+                          <AlertTriangle className="size-3.5 shrink-0" />
                           Součet položek nesedí
                         </span>
                       ) : null}
@@ -306,40 +310,67 @@ export function ReceiptsOverview({
                       Bez rozpisu položek.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg ring-1 ring-foreground/10">
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-muted/50 text-xs text-muted-foreground">
-                          <tr>
-                            <th className="px-3 py-2 font-medium">Název</th>
-                            <th className="px-3 py-2 text-right font-medium">
-                              Počet
-                            </th>
-                            <th className="px-3 py-2 text-right font-medium">
-                              Cena / ks
-                            </th>
-                            <th className="px-3 py-2 text-right font-medium">
-                              Celkem
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/60">
-                          {selectedItems.map((item, idx) => (
-                            <tr key={`${item.name}-${idx}`}>
-                              <td className="px-3 py-2">{item.name}</td>
-                              <td className="px-3 py-2 text-right">
-                                {item.quantity}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                {formatCzk(item.unitPrice)}
-                              </td>
-                              <td className="px-3 py-2 text-right font-medium">
+                    <>
+                      {/* Mobil: stacked seznam */}
+                      <ul className="divide-y divide-border/60 rounded-lg ring-1 ring-foreground/10 sm:hidden">
+                        {selectedItems.map((item, idx) => (
+                          <li
+                            key={`${item.name}-${idx}`}
+                            className="flex flex-col gap-1 px-3 py-3"
+                          >
+                            <p className="break-words font-medium leading-snug">
+                              {item.name}
+                            </p>
+                            <div className="flex items-baseline justify-between gap-3 text-sm text-muted-foreground">
+                              <span className="shrink-0">
+                                {item.quantity}× {formatCzk(item.unitPrice)}
+                              </span>
+                              <span className="font-medium text-foreground">
                                 {formatCzk(item.totalPrice)}
-                              </td>
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/* Desktop: tabulka */}
+                      <div className="hidden overflow-x-auto rounded-lg ring-1 ring-foreground/10 sm:block">
+                        <table className="w-full min-w-[28rem] text-left text-sm">
+                          <thead className="bg-muted/50 text-xs text-muted-foreground">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Název</th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                Počet
+                              </th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                Cena / ks
+                              </th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                Celkem
+                              </th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {selectedItems.map((item, idx) => (
+                              <tr key={`${item.name}-${idx}`}>
+                                <td className="max-w-[12rem] px-3 py-2 break-words">
+                                  {item.name}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {item.quantity}
+                                </td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  {formatCzk(item.unitPrice)}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                                  {formatCzk(item.totalPrice)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -358,10 +389,11 @@ export function ReceiptsOverview({
                   <p className="text-sm text-destructive">{actionError}</p>
                 ) : null}
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2 pb-1 sm:flex-row sm:flex-wrap">
                   <Button
                     type="button"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => setSelected(null)}
                   >
                     <ArrowLeft />
@@ -372,6 +404,7 @@ export function ReceiptsOverview({
                       <Button
                         type="button"
                         variant="secondary"
+                        className="w-full sm:w-auto"
                         onClick={() => setEditing(true)}
                       >
                         <Pencil />
@@ -380,6 +413,7 @@ export function ReceiptsOverview({
                       <Button
                         type="button"
                         variant="destructive"
+                        className="w-full sm:w-auto"
                         disabled={pending}
                         onClick={() => {
                           if (!selected) return;
