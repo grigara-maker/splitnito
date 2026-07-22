@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { CloseEventButton } from "@/components/app/close-event-button";
 import { ReceiptForm } from "@/components/app/receipt-form";
@@ -26,19 +26,44 @@ export default async function EventPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect("/login");
+  }
+
   const { data: event } = await supabase
     .from("events")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (!event) notFound();
 
-  const { data: receipts } = await supabase
+  const { data: receiptsRaw } = await supabase
     .from("receipts")
-    .select("id, vendor, total_amount, created_at, image_url, user_id, profiles(name)")
+    .select("id, vendor, total_amount, created_at, image_url, user_id")
     .eq("event_id", id)
     .order("created_at", { ascending: false });
+
+  const userIds = Array.from(
+    new Set((receiptsRaw ?? []).map((r) => r.user_id))
+  );
+  const nameByUser = new Map<string, string>();
+
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, name")
+      .in("id", userIds);
+
+    for (const p of profiles ?? []) {
+      nameByUser.set(p.id, p.name);
+    }
+  }
+
+  const receipts = (receiptsRaw ?? []).map((r) => ({
+    ...r,
+    profiles: { name: nameByUser.get(r.user_id) ?? "Neznámý" },
+  }));
 
   let settlement: SettlementSummary | null = null;
   if (event.status === "closed") {
@@ -46,7 +71,7 @@ export default async function EventPage({
       .from("settlements")
       .select("summary_data")
       .eq("event_id", id)
-      .single();
+      .maybeSingle();
     if (row?.summary_data) {
       settlement = row.summary_data as unknown as SettlementSummary;
     }
@@ -68,14 +93,16 @@ export default async function EventPage({
             Přehled dokladů a vyúčtování ve Splitnito.
           </p>
         </div>
-        {event.status === "active" ? <CloseEventButton eventId={event.id} /> : null}
+        {event.status === "active" ? (
+          <CloseEventButton eventId={event.id} />
+        ) : null}
       </div>
 
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Doklady
         </h2>
-        <ReceiptsOverview receipts={receipts ?? []} />
+        <ReceiptsOverview receipts={receipts} />
       </section>
 
       {event.status === "active" ? (
@@ -98,7 +125,7 @@ export default async function EventPage({
           <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Vyúčtování
           </h2>
-          <SettlementView summary={settlement} currentUserId={user!.id} />
+          <SettlementView summary={settlement} currentUserId={user.id} />
         </section>
       ) : null}
     </div>

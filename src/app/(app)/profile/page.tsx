@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { ProfileForm } from "@/components/app/profile-form";
 import { createClient } from "@/lib/supabase/server";
 
@@ -7,15 +9,25 @@ export default async function ProfilePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect("/login");
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*, companies(name, invite_code)")
-    .eq("id", user!.id)
-    .single();
+    .select("name, iban, company_id")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  const company = Array.isArray(profile!.companies)
-    ? profile!.companies[0]
-    : profile!.companies;
+  if (!profile) {
+    redirect("/register");
+  }
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("name, invite_code")
+    .eq("id", profile.company_id)
+    .maybeSingle();
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,8 +40,8 @@ export default async function ProfilePage() {
         </p>
       </div>
       <ProfileForm
-        name={profile!.name}
-        iban={profile!.iban}
+        name={profile.name}
+        iban={profile.iban}
         inviteCode={company?.invite_code ?? "—"}
         companyName={company?.name ?? "—"}
       />

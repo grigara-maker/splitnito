@@ -4,13 +4,6 @@ import { useMemo, useState } from "react";
 
 import { formatCzk } from "@/lib/iban";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type ReceiptRow = {
   id: string;
@@ -38,7 +31,10 @@ export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
   const total = filtered.reduce((s, r) => s + Number(r.total_amount), 0);
 
   const byUser = useMemo(() => {
-    const map = new Map<string, { name: string; items: ReceiptRow[]; sum: number }>();
+    const map = new Map<
+      string,
+      { name: string; items: ReceiptRow[]; sum: number }
+    >();
     for (const r of filtered) {
       const name = Array.isArray(r.profiles)
         ? r.profiles[0]?.name
@@ -73,20 +69,25 @@ export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
           </p>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Filtr dodavatel</span>
-          <Select value={vendorFilter} onValueChange={(v) => setVendorFilter(v ?? "all")}>
-            <SelectTrigger className="min-w-44 bg-background">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Všichni dodavatelé</SelectItem>
-              {vendors.map((v) => (
-                <SelectItem key={v} value={v}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <label
+            htmlFor="vendor-filter"
+            className="text-xs text-muted-foreground"
+          >
+            Filtr dodavatel
+          </label>
+          <select
+            id="vendor-filter"
+            className="h-8 min-w-44 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            value={vendorFilter}
+            onChange={(e) => setVendorFilter(e.target.value)}
+          >
+            <option value="all">Všichni dodavatelé</option>
+            {vendors.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { CreateEventForm } from "@/components/app/create-event-form";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { formatCzk } from "@/lib/iban";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -20,21 +22,33 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect("/login");
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
-    .eq("id", user!.id)
-    .single();
+    .select("company_id")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  const { data: events } = await supabase
+  if (!profile) {
+    redirect("/register");
+  }
+
+  const { data: events, error: eventsError } = await supabase
     .from("events")
     .select("id, name, status, created_at")
-    .eq("company_id", profile!.company_id)
+    .eq("company_id", profile.company_id)
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
+  if (eventsError) {
+    console.error("events query failed", eventsError);
+  }
+
   const eventIds = (events ?? []).map((e) => e.id);
-  let totals = new Map<string, number>();
+  const totals = new Map<string, number>();
 
   if (eventIds.length > 0) {
     const { data: receipts } = await supabase
@@ -84,7 +98,7 @@ export default async function DashboardPage() {
                 <li key={event.id}>
                   <Link
                     href={`/events/${event.id}`}
-                    className="block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:ring-primary/30 hover:shadow-md"
+                    className="block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:shadow-md hover:ring-primary/30"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-medium text-foreground">{event.name}</p>
@@ -119,13 +133,12 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
           <div className="mt-4">
-            <Button
-              variant="outline"
-              className="w-full"
-              render={<Link href="/history" />}
+            <Link
+              href="/history"
+              className={cn(buttonVariants({ variant: "outline" }), "w-full")}
             >
               Historie uzavřených akcí
-            </Button>
+            </Link>
           </div>
         </aside>
       </div>

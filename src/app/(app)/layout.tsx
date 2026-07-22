@@ -18,25 +18,32 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*, companies(id, name, invite_code)")
+    .select("id, name, company_id")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile) {
-    redirect("/login");
+  if (profileError) {
+    console.error("profiles query failed", profileError);
   }
 
-  const { data: events } = await supabase
-    .from("events")
-    .select("id, name, status")
-    .eq("company_id", profile.company_id)
-    .order("created_at", { ascending: false });
+  if (!profile) {
+    redirect("/register");
+  }
 
-  const company = Array.isArray(profile.companies)
-    ? profile.companies[0]
-    : profile.companies;
+  const [{ data: company }, { data: events }] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, name, invite_code")
+      .eq("id", profile.company_id)
+      .maybeSingle(),
+    supabase
+      .from("events")
+      .select("id, name, status")
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[linear-gradient(180deg,oklch(0.985_0.01_200)_0%,oklch(0.96_0.015_190)_100%)]">
@@ -49,10 +56,14 @@ export default async function AppLayout({
         {children}
       </main>
       <footer className="border-t border-border/60 py-4 text-center text-xs text-muted-foreground">
-        <Link href="/dashboard" className="font-heading font-medium text-foreground">
+        <Link
+          href="/dashboard"
+          className="font-heading font-medium text-foreground"
+        >
           Splitnito
         </Link>
-        {" · "}chytré vyúčtování firemních nákladů
+        {" · "}
+        chytré vyúčtování firemních nákladů
       </footer>
     </div>
   );
