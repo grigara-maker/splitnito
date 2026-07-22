@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Archive, Building2, CalendarDays, LogOut, UserRound } from "lucide-react";
+import { useState, useTransition } from "react";
+import {
+  Archive,
+  Building2,
+  CalendarDays,
+  Loader2,
+  LogOut,
+  UserRound,
+} from "lucide-react";
 
 import { signOutAction } from "@/lib/actions/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -28,6 +36,9 @@ export function AppNav({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [navPending, startNavTransition] = useTransition();
+  const [switching, setSwitching] = useState(false);
+  const switchLoading = navPending || switching;
 
   // events už přicházejí jen ongoing (aktivní + čeká na platby)
   const eventMatch = pathname.match(/^\/events\/([^/]+)/);
@@ -55,17 +66,22 @@ export function AppNav({
 
         <div className="flex flex-1 items-center justify-end gap-2 sm:gap-3">
           {showEventSwitcher && events.length > 0 ? (
-            <>
+            <div className="relative">
               <label className="sr-only" htmlFor="event-switcher">
                 Aktivní akce
               </label>
               <select
                 id="event-switcher"
-                className="h-8 max-w-[14rem] min-w-[10rem] rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                disabled={switchLoading}
+                className="h-8 max-w-[14rem] min-w-[10rem] rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-100"
                 value={currentEventId}
                 onChange={(e) => {
                   const id = e.target.value;
-                  if (id) router.push(`/events/${id}`);
+                  if (!id || id === currentEventId) return;
+                  setSwitching(true);
+                  startNavTransition(() => {
+                    router.push(`/events/${id}`);
+                  });
                 }}
               >
                 {events.map((event) => (
@@ -76,7 +92,12 @@ export function AppNav({
                   </option>
                 ))}
               </select>
-            </>
+              {switchLoading ? (
+                <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/35 shadow-inner">
+                  <Loader2 className="size-4 animate-spin text-white" />
+                </span>
+              ) : null}
+            </div>
           ) : null}
 
           <Link
