@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useFormStatus } from "react-dom";
 import {
   Archive,
   Building2,
@@ -11,8 +11,24 @@ import {
 } from "lucide-react";
 
 import { signOutAction } from "@/lib/actions/auth";
+import { LoadingLink } from "@/components/app/loading-link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+function SignOutButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button
+      type="submit"
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Odhlásit"
+      loading={pending}
+    >
+      <LogOut />
+    </Button>
+  );
+}
 
 export function AppNav({
   profileName,
@@ -29,12 +45,13 @@ export function AppNav({
     <header className="sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-4">
-          <Link
+          <LoadingLink
             href="/dashboard"
-            className="font-heading text-lg font-semibold tracking-tight"
+            spinner="sm"
+            className="font-heading text-lg font-semibold tracking-tight rounded-lg px-1"
           >
             Splitnito
-          </Link>
+          </LoadingLink>
           <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             {companyName}
             {isCompanyAdmin ? " · firma" : ""}
@@ -42,8 +59,9 @@ export function AppNav({
         </div>
 
         <div className="flex flex-1 items-center justify-end gap-2 sm:gap-3">
-          <Link
+          <LoadingLink
             href="/dashboard"
+            spinner="sm"
             className={cn(
               buttonVariants({
                 variant:
@@ -57,10 +75,11 @@ export function AppNav({
           >
             <CalendarDays />
             <span className="hidden sm:inline">Akce</span>
-          </Link>
+          </LoadingLink>
 
-          <Link
+          <LoadingLink
             href="/history"
+            spinner="sm"
             className={cn(
               buttonVariants({
                 variant: pathname.startsWith("/history") ? "secondary" : "ghost",
@@ -70,11 +89,12 @@ export function AppNav({
           >
             <Archive />
             <span className="hidden sm:inline">Historie</span>
-          </Link>
+          </LoadingLink>
 
           {isCompanyAdmin ? (
-            <Link
+            <LoadingLink
               href="/company"
+              spinner="sm"
               className={cn(
                 buttonVariants({
                   variant:
@@ -88,10 +108,11 @@ export function AppNav({
             >
               <Building2 />
               <span className="hidden sm:inline">Nastavení</span>
-            </Link>
+            </LoadingLink>
           ) : (
-            <Link
+            <LoadingLink
               href="/profile"
+              spinner="sm"
               className={cn(
                 buttonVariants({
                   variant: pathname.startsWith("/profile")
@@ -103,17 +124,10 @@ export function AppNav({
             >
               <UserRound />
               <span className="hidden sm:inline">{profileName}</span>
-            </Link>
+            </LoadingLink>
           )}
           <form action={signOutAction}>
-            <Button
-              type="submit"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Odhlásit"
-            >
-              <LogOut />
-            </Button>
+            <SignOutButton />
           </form>
         </div>
       </div>
