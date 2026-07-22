@@ -15,7 +15,7 @@ export function CloseEventButton({ eventId }: { eventId: string }) {
     <div className="flex flex-col gap-2">
       <Button
         variant="destructive"
-        disabled={pending}
+        loading={pending}
         onClick={() => {
           if (
             !confirm(
@@ -34,7 +34,7 @@ export function CloseEventButton({ eventId }: { eventId: string }) {
           });
         }}
       >
-        {pending ? "Uzavírám…" : "Uzavřít vyúčtování"}
+        Uzavřít vyúčtování
       </Button>
       {error ? (
         <p className="text-sm text-destructive" role="alert">

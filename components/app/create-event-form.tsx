@@ -28,8 +28,8 @@ export function CreateEventForm() {
           {state.error}
         </p>
       ) : null}
-      <Button type="submit" disabled={pending}>
-        {pending ? "Vytvářím…" : "Vytvořit akci"}
+      <Button type="submit" loading={pending}>
+        Vytvořit akci
       </Button>
     </form>
   );

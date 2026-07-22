@@ -57,8 +57,8 @@ export function LoginForm() {
               {state.error}
             </p>
           ) : null}
-          <Button type="submit" size="lg" className="w-full" disabled={pending}>
-            {pending ? "Přihlašuji…" : "Přihlásit se"}
+          <Button type="submit" size="lg" className="w-full" loading={pending}>
+            Přihlásit se
           </Button>
         </form>
         <p className="mt-6 text-center text-sm text-muted-foreground">

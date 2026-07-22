@@ -29,8 +29,8 @@ export function RemoveMemberButton({
       }}
     >
       <input type="hidden" name="userId" value={userId} />
-      <Button type="submit" variant="destructive" size="sm" disabled={pending}>
-        {pending ? "Mažu…" : "Odstranit"}
+      <Button type="submit" variant="destructive" size="sm" loading={pending}>
+        Odstranit
       </Button>
       {state.error ? (
         <p className="mt-1 text-xs text-destructive">{state.error}</p>

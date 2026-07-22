@@ -62,8 +62,8 @@ export function ProfileForm({
             {state.success}
           </p>
         ) : null}
-        <Button type="submit" disabled={pending} className="w-fit">
-          {pending ? "Ukládám…" : "Uložit profil"}
+        <Button type="submit" loading={pending} className="w-fit">
+          Uložit profil
         </Button>
       </form>
 

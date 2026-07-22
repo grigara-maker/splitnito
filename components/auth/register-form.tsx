@@ -134,12 +134,8 @@ export function RegisterForm({
             </p>
           ) : null}
 
-          <Button type="submit" size="lg" className="w-full" disabled={pending}>
-            {pending
-              ? "Vytvářím účet…"
-              : accountType === "company"
-                ? "Založit firmu"
-                : "Připojit se k firmě"}
+          <Button type="submit" size="lg" className="w-full" loading={pending}>
+            {accountType === "company" ? "Založit firmu" : "Připojit se k firmě"}
           </Button>
         </form>
         <p className="mt-6 text-center text-sm text-muted-foreground">

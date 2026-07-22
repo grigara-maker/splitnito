@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2, Upload } from "lucide-react";
 
 import {
   createReceiptAction,
@@ -255,11 +255,11 @@ export function ReceiptForm({
           <Button
             type="button"
             variant="outline"
-            disabled={ocrLoading}
+            loading={ocrLoading}
             onClick={() => fileRef.current?.click()}
           >
-            {ocrLoading ? <Loader2 className="animate-spin" /> : <Upload />}
-            {ocrLoading ? "Zpracovávám…" : "Vyfotit / nahrát účtenku"}
+            <Upload />
+            Vyfotit / nahrát účtenku
           </Button>
           {imageUrl ? (
             <span className="text-xs text-muted-foreground">Obrázek nahrán</span>
@@ -414,12 +414,8 @@ export function ReceiptForm({
         </p>
       ) : null}
 
-      <Button type="submit" disabled={pending || ocrLoading}>
-        {pending
-          ? "Ukládám…"
-          : isEdit
-            ? "Uložit změny"
-            : "Uložit doklad"}
+      <Button type="submit" loading={pending || ocrLoading}>
+        {isEdit ? "Uložit změny" : "Uložit doklad"}
       </Button>
     </form>
   );

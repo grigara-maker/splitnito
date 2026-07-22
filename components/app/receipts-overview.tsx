@@ -414,7 +414,7 @@ export function ReceiptsOverview({
                         type="button"
                         variant="destructive"
                         className="w-full sm:w-auto"
-                        disabled={pending}
+                        loading={pending}
                         onClick={() => {
                           if (!selected) return;
                           if (!confirm("Opravdu smazat tento doklad?")) return;

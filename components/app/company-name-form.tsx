@@ -37,8 +37,8 @@ export function CompanyNameForm({ companyName }: { companyName: string }) {
           {state.success}
         </p>
       ) : null}
-      <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? "Ukládám…" : "Uložit název"}
+      <Button type="submit" loading={pending} className="w-fit">
+        Uložit název
       </Button>
     </form>
   );

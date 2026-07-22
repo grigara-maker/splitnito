@@ -39,7 +39,7 @@ export function SettlementView({
           <Button
             variant="outline"
             size="sm"
-            disabled={pending}
+            loading={pending}
             onClick={() => {
               if (
                 !confirm(
@@ -188,7 +188,7 @@ function TransferCard({
             QR kód byl odeslán dlužníkovi, čeká se na zaplacení.
           </p>
           <Button
-            disabled={pending}
+            loading={pending}
             onClick={() => {
               startTransition(async () => {
                 const result = await confirmPaymentAction(eventId, transfer.id);
@@ -197,7 +197,7 @@ function TransferCard({
               });
             }}
           >
-            {pending ? "Potvrzuji…" : "Potvrdit zaplacení"}
+            Potvrdit zaplacení
           </Button>
         </div>
       ) : (

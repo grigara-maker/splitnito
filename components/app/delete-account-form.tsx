@@ -60,12 +60,8 @@ export function DeleteAccountForm({
             {state.error}
           </p>
         ) : null}
-        <Button type="submit" variant="destructive" disabled={pending}>
-          {pending
-            ? "Mažu…"
-            : mode === "company"
-              ? "Trvale smazat firmu"
-              : "Trvale smazat účet"}
+        <Button type="submit" variant="destructive" loading={pending}>
+          {mode === "company" ? "Trvale smazat firmu" : "Trvale smazat účet"}
         </Button>
       </form>
     </div>

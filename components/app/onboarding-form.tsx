@@ -110,8 +110,8 @@ export function OnboardingForm({
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" disabled={pending}>
-        {pending ? "Ukládám…" : "Uložit účet a pokračovat"}
+      <Button type="submit" size="lg" loading={pending}>
+        Uložit účet a pokračovat
       </Button>
     </form>
   );
