@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Archive, Building2, LogOut, UserRound } from "lucide-react";
+import { Archive, Building2, CalendarDays, LogOut, UserRound } from "lucide-react";
 
 import { signOutAction } from "@/lib/actions/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -78,6 +78,23 @@ export function AppNav({
               </select>
             </>
           ) : null}
+
+          <Link
+            href="/dashboard"
+            className={cn(
+              buttonVariants({
+                variant:
+                  pathname.startsWith("/dashboard") ||
+                  pathname.startsWith("/events")
+                    ? "secondary"
+                    : "ghost",
+                size: "sm",
+              })
+            )}
+          >
+            <CalendarDays />
+            <span className="hidden sm:inline">Akce</span>
+          </Link>
 
           <Link
             href="/history"
