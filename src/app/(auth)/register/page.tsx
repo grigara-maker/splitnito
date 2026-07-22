@@ -2,7 +2,14 @@ import Link from "next/link";
 
 import { RegisterForm } from "@/components/auth/register-form";
 
-export default function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite?: string }>;
+}) {
+  const params = await searchParams;
+  const invite = params.invite?.trim().toUpperCase() || undefined;
+
   return (
     <div className="relative flex min-h-full flex-1 flex-col items-center justify-center px-6 py-12">
       <div
@@ -14,8 +21,8 @@ export default function RegisterPage() {
           Splitnito
         </Link>
       </div>
-      <div className="relative z-10 w-full flex justify-center">
-        <RegisterForm />
+      <div className="relative z-10 flex w-full justify-center">
+        <RegisterForm defaultInvite={invite} />
       </div>
     </div>
   );

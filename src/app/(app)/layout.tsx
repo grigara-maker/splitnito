@@ -38,11 +38,10 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, name, company_id")
+    .select("id, name, company_id, role")
     .eq("id", user.id)
     .maybeSingle();
 
-  // Bez profilu → onboarding (mimo tento layout, bez redirect smyčky)
   if (!profile) {
     redirect("/onboarding");
   }
@@ -66,6 +65,7 @@ export default async function AppLayout({
         profileName={profile.name}
         companyName={company?.name ?? "Firma"}
         events={events ?? []}
+        isCompanyAdmin={profile.role === "company"}
       />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
         {children}

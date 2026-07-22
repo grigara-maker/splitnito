@@ -1,21 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import QRCode from "qrcode";
+import { useRouter } from "next/navigation";
 
+import {
+  confirmPaymentAction,
+  reopenEventAction,
+} from "@/lib/actions/events";
 import { buildSpayd } from "@/lib/spayd";
 import { formatCzk } from "@/lib/iban";
-import type { SettlementSummary } from "@/lib/settlement";
+import type { SettlementSummary, SettlementTransfer } from "@/lib/settlement";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export function SettlementView({
   summary,
   currentUserId,
+  eventId,
+  canReopen,
 }: {
   summary: SettlementSummary;
   currentUserId: string;
+  eventId: string;
+  canReopen: boolean;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Badge variant={summary.allPaid ? "secondary" : "outline"}>
+          {summary.allPaid ? "Hotovo — vše zaplaceno" : "Čeká se na platby"}
+        </Badge>
+        {canReopen && !summary.allPaid ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => {
+              if (
+                !confirm(
+                  "Znovu otevřít akci? Doklady půjde znovu upravovat a vyúčtování se smaže."
+                )
+              ) {
+                return;
+              }
+              startTransition(async () => {
+                const result = await reopenEventAction(eventId);
+                if (result.error) setError(result.error);
+                else router.refresh();
+              });
+            }}
+          >
+            Obnovit akci
+          </Button>
+        ) : null}
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Celkem utraceno" value={formatCzk(summary.totalAmount)} />
         <Stat label="Počet společníků" value={String(summary.memberCount)} />
@@ -71,33 +115,99 @@ export function SettlementView({
           </p>
         ) : (
           <ul className="grid gap-4">
-            {summary.transfers.map((t, idx) => (
-              <li
-                key={`${t.fromUserId}-${t.toUserId}-${idx}`}
-                className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
-              >
-                <p className="font-medium">
-                  {t.fromName} → {t.toName}: {formatCzk(t.amount)}
-                </p>
-                {t.toIban ? (
-                  <PaymentQr
-                    iban={t.toIban}
-                    amount={t.amount}
-                    recipientName={t.toName}
-                    message={`Splitnito: ${t.fromName} → ${t.toName}`}
-                    highlight={t.fromUserId === currentUserId}
-                  />
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Příjemce nemá vyplněný IBAN — doplňte ho v profilu.
-                  </p>
-                )}
-              </li>
+            {summary.transfers.map((t) => (
+              <TransferCard
+                key={t.id}
+                transfer={t}
+                currentUserId={currentUserId}
+                eventId={eventId}
+                onChanged={() => router.refresh()}
+              />
             ))}
           </ul>
         )}
       </section>
+
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function TransferCard({
+  transfer,
+  currentUserId,
+  eventId,
+  onChanged,
+}: {
+  transfer: SettlementTransfer;
+  currentUserId: string;
+  eventId: string;
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const isDebtor = transfer.fromUserId === currentUserId;
+  const isCreditor = transfer.toUserId === currentUserId;
+  const confirmed = transfer.status === "confirmed";
+
+  return (
+    <li className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium">
+          {transfer.fromName} → {transfer.toName}: {formatCzk(transfer.amount)}
+        </p>
+        <Badge variant={confirmed ? "secondary" : "outline"}>
+          {confirmed ? "Hotovo" : "Čeká na platbu"}
+        </Badge>
+      </div>
+
+      {confirmed ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Platba byla potvrzena.
+        </p>
+      ) : isDebtor ? (
+        transfer.toIban ? (
+          <PaymentQr
+            iban={transfer.toIban}
+            amount={transfer.amount}
+            recipientName={transfer.toName}
+            message={`Splitnito: ${transfer.fromName} → ${transfer.toName}`}
+          />
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Příjemce nemá vyplněný IBAN — doplňte ho v profilu.
+          </p>
+        )
+      ) : isCreditor ? (
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            QR kód byl odeslán dlužníkovi, čeká se na zaplacení.
+          </p>
+          <Button
+            disabled={pending}
+            onClick={() => {
+              startTransition(async () => {
+                const result = await confirmPaymentAction(eventId, transfer.id);
+                if (result.error) setError(result.error);
+                else onChanged();
+              });
+            }}
+          >
+            {pending ? "Potvrzuji…" : "Potvrdit zaplacení"}
+          </Button>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Platba mezi ostatními členy.
+        </p>
+      )}
+
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+    </li>
   );
 }
 
@@ -115,13 +225,11 @@ function PaymentQr({
   amount,
   recipientName,
   message,
-  highlight,
 }: {
   iban: string;
   amount: number;
   recipientName: string;
   message: string;
-  highlight: boolean;
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const spayd = buildSpayd({ iban, amount, recipientName, message });
@@ -131,9 +239,7 @@ function PaymentQr({
   }, [spayd]);
 
   return (
-    <div
-      className={`mt-3 flex flex-col gap-2 sm:flex-row sm:items-center ${highlight ? "rounded-lg bg-accent/40 p-3" : ""}`}
-    >
+    <div className="mt-3 flex flex-col gap-2 rounded-lg bg-accent/40 p-3 sm:flex-row sm:items-center">
       {dataUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -145,11 +251,9 @@ function PaymentQr({
         <div className="size-40 animate-pulse rounded-lg bg-muted" />
       )}
       <div className="text-sm text-muted-foreground">
-        {highlight ? (
-          <p className="mb-1 font-medium text-foreground">
-            Toto je vaše platba — naskenujte QR v bankovní aplikaci.
-          </p>
-        ) : null}
+        <p className="mb-1 font-medium text-foreground">
+          Naskenujte QR v bankovní aplikaci.
+        </p>
         <p className="font-mono text-xs break-all">{iban}</p>
         <p className="mt-1">{formatCzk(amount)}</p>
       </div>

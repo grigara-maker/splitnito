@@ -36,6 +36,7 @@ export type Database = {
           company_id: string;
           name: string;
           iban: string | null;
+          role: "company" | "member";
           created_at: string;
         };
         Insert: {
@@ -43,6 +44,7 @@ export type Database = {
           company_id: string;
           name: string;
           iban?: string | null;
+          role?: "company" | "member";
           created_at?: string;
         };
         Update: {
@@ -50,6 +52,7 @@ export type Database = {
           company_id?: string;
           name?: string;
           iban?: string | null;
+          role?: "company" | "member";
           created_at?: string;
         };
         Relationships: [
@@ -103,6 +106,7 @@ export type Database = {
           total_amount: number;
           items: Json | null;
           image_url: string | null;
+          purchased_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -113,6 +117,7 @@ export type Database = {
           total_amount: number;
           items?: Json | null;
           image_url?: string | null;
+          purchased_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -123,6 +128,7 @@ export type Database = {
           total_amount?: number;
           items?: Json | null;
           image_url?: string | null;
+          purchased_at?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -188,8 +194,17 @@ export type Database = {
           p_iban?: string | null;
           p_invite_code?: string | null;
           p_company_name?: string | null;
+          p_role?: string | null;
         };
         Returns: string;
+      };
+      is_company_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      remove_company_member: {
+        Args: { p_user_id: string };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

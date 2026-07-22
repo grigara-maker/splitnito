@@ -18,24 +18,75 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const initial: AuthState = {};
 
-export function RegisterForm() {
+export function RegisterForm({
+  defaultInvite,
+}: {
+  defaultInvite?: string;
+}) {
   const [state, formAction, pending] = useActionState(registerAction, initial);
-  const [mode, setMode] = useState<"create" | "join">("create");
+  const [accountType, setAccountType] = useState<"company" | "member">(
+    defaultInvite ? "member" : "company"
+  );
 
   return (
-    <Card className="w-full max-w-md shadow-lg shadow-primary/5 bg-card/90 backdrop-blur-md">
+    <Card className="w-full max-w-md bg-card/90 shadow-lg shadow-primary/5 backdrop-blur-md">
       <CardHeader>
         <CardTitle className="font-heading text-2xl">Registrace</CardTitle>
         <CardDescription>
-          Vytvořte firmu ve Splitnito nebo se připojte přes invite kód.
+          Zvolte, jestli zakládáte firmu, nebo se připojujete jako uživatel.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-4">
-          <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="accountType" value={accountType} />
+
+          <Tabs
+            value={accountType}
+            onValueChange={(v) => setAccountType(v as "company" | "member")}
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="company">Jsem firma</TabsTrigger>
+              <TabsTrigger value="member">Jsem uživatel</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="company" className="mt-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Založíte firmu a získáte kód pro pozvání kolegů.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="companyName">Název firmy</Label>
+                <Input
+                  id="companyName"
+                  name="companyName"
+                  placeholder="Moje s.r.o."
+                  required={accountType === "company"}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="member" className="mt-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Zadejte kód firmy od administrátora — účet se k firmě trvale
+                přidruží.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="inviteCode">Kód firmy</Label>
+                <Input
+                  id="inviteCode"
+                  name="inviteCode"
+                  placeholder="ABCD1234"
+                  required={accountType === "member"}
+                  defaultValue={defaultInvite ?? ""}
+                  className="uppercase"
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="name">Jméno</Label>
+            <Label htmlFor="name">
+              {accountType === "company" ? "Jméno správce" : "Vaše jméno"}
+            </Label>
             <Input id="name" name="name" required placeholder="Jan Novák" />
           </div>
           <div className="flex flex-col gap-2">
@@ -70,39 +121,6 @@ export function RegisterForm() {
             />
           </div>
 
-          <Tabs
-            value={mode}
-            onValueChange={(v) => setMode(v as "create" | "join")}
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="create">Nová firma</TabsTrigger>
-              <TabsTrigger value="join">Invite kód</TabsTrigger>
-            </TabsList>
-            <TabsContent value="create" className="mt-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="companyName">Název firmy</Label>
-                <Input
-                  id="companyName"
-                  name="companyName"
-                  placeholder="Moje s.r.o."
-                  required={mode === "create"}
-                />
-              </div>
-            </TabsContent>
-            <TabsContent value="join" className="mt-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="inviteCode">Invite kód</Label>
-                <Input
-                  id="inviteCode"
-                  name="inviteCode"
-                  placeholder="ABCD1234"
-                  required={mode === "join"}
-                  className="uppercase"
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
-
           {state.error ? (
             <p className="text-sm text-destructive" role="alert">
               {state.error}
@@ -110,7 +128,11 @@ export function RegisterForm() {
           ) : null}
 
           <Button type="submit" size="lg" className="w-full" disabled={pending}>
-            {pending ? "Vytvářím účet…" : "Vytvořit účet"}
+            {pending
+              ? "Vytvářím účet…"
+              : accountType === "company"
+                ? "Založit firmu"
+                : "Připojit se k firmě"}
           </Button>
         </form>
         <p className="mt-6 text-center text-sm text-muted-foreground">

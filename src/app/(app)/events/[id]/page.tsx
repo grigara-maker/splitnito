@@ -12,7 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { SettlementSummary } from "@/lib/settlement";
+import {
+  normalizeSettlementSummary,
+  type SettlementSummary,
+} from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function EventPage({
@@ -30,17 +33,27 @@ export default async function EventPage({
     redirect("/login");
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, role, company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) redirect("/onboarding");
+
   const { data: event } = await supabase
     .from("events")
     .select("*")
     .eq("id", id)
     .maybeSingle();
 
-  if (!event) notFound();
+  if (!event || event.company_id !== profile.company_id) notFound();
 
   const { data: receiptsRaw } = await supabase
     .from("receipts")
-    .select("id, vendor, total_amount, created_at, image_url, user_id, items")
+    .select(
+      "id, vendor, total_amount, created_at, purchased_at, image_url, user_id, items"
+    )
     .eq("event_id", id)
     .order("created_at", { ascending: false });
 
@@ -65,6 +78,7 @@ export default async function EventPage({
     profiles: { name: nameByUser.get(r.user_id) ?? "Neznámý" },
   }));
 
+  const isCompanyAdmin = profile.role === "company";
   let settlement: SettlementSummary | null = null;
   if (event.status === "closed") {
     const { data: row } = await supabase
@@ -73,7 +87,7 @@ export default async function EventPage({
       .eq("event_id", id)
       .maybeSingle();
     if (row?.summary_data) {
-      settlement = row.summary_data as unknown as SettlementSummary;
+      settlement = normalizeSettlementSummary(row.summary_data);
     }
   }
 
@@ -102,7 +116,13 @@ export default async function EventPage({
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Doklady
         </h2>
-        <ReceiptsOverview receipts={receipts} />
+        <ReceiptsOverview
+          receipts={receipts}
+          eventId={event.id}
+          currentUserId={user.id}
+          isCompanyAdmin={isCompanyAdmin}
+          eventActive={event.status === "active"}
+        />
       </section>
 
       {event.status === "active" ? (
@@ -125,7 +145,12 @@ export default async function EventPage({
           <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Vyúčtování
           </h2>
-          <SettlementView summary={settlement} currentUserId={user.id} />
+          <SettlementView
+            summary={settlement}
+            currentUserId={user.id}
+            eventId={event.id}
+            canReopen={!settlement.allPaid}
+          />
         </section>
       ) : null}
     </div>

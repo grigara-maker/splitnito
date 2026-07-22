@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { completeOnboardingAction } from "@/lib/actions/onboarding";
 import type { AuthState } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const initial: AuthState = {};
 
@@ -21,9 +22,14 @@ export function OnboardingForm({
     completeOnboardingAction,
     initial
   );
+  const [accountType, setAccountType] = useState<"company" | "member">(
+    "company"
+  );
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      <input type="hidden" name="accountType" value={accountType} />
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="email">E-mail</Label>
         <Input
@@ -46,6 +52,47 @@ export function OnboardingForm({
         />
       </div>
 
+      <Tabs
+        value={accountType}
+        onValueChange={(v) => setAccountType(v as "company" | "member")}
+      >
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="company">Jsem firma</TabsTrigger>
+          <TabsTrigger value="member">Jsem uživatel</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="company" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Založíte profil firmy a získáte kód pro pozvání kolegů.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="companyName">Název firmy</Label>
+            <Input
+              id="companyName"
+              name="companyName"
+              placeholder="Moje s.r.o."
+              required={accountType === "company"}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="member" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Zadejte kód firmy — účet se k ní trvale přidruží.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="inviteCode">Kód firmy</Label>
+            <Input
+              id="inviteCode"
+              name="inviteCode"
+              placeholder="ABCD1234"
+              required={accountType === "member"}
+              className="uppercase"
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="iban">IBAN (pro QR platby)</Label>
         <Input
@@ -55,20 +102,6 @@ export function OnboardingForm({
         />
         <p className="text-xs text-muted-foreground">
           Volitelné — doplníte později v profilu.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="inviteCode">Kód firmy (volitelné)</Label>
-        <Input
-          id="inviteCode"
-          name="inviteCode"
-          placeholder="ABCD1234"
-          className="uppercase"
-        />
-        <p className="text-xs text-muted-foreground">
-          Pokud se připojujete ke kolegům, zadejte jejich invite kód. Jinak se
-          vytvoří vaše vlastní firma automaticky.
         </p>
       </div>
 

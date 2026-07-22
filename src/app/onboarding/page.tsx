@@ -51,17 +51,17 @@ export default async function OnboardingPage() {
         <div className="text-center">
           <p className="font-heading text-lg font-semibold">Splitnito</p>
           <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
-            Váš uživatelský účet
+            Dokončení účtu
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Doplňte údaje o sobě — jméno a volitelně IBAN pro vyúčtování.
+            Zvolte, jestli zakládáte firmu, nebo se připojujete jako uživatel.
           </p>
         </div>
         <Card className="bg-card/90 shadow-lg backdrop-blur-md">
           <CardHeader>
-            <CardTitle>Údaje uživatele</CardTitle>
+            <CardTitle>Profil ve Splitnito</CardTitle>
             <CardDescription>
-              Tento účet bude přiřazen k firmě (nové, nebo přes invite kód).
+              Firma získá invite kód. Uživatel zadá kód firmy.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -6,6 +6,7 @@ import { normalizeReceiptItems } from "@/lib/types/database";
 type OcrResult = {
   vendor: string | null;
   totalAmount: number | null;
+  purchasedAt: string | null;
   items: Array<{
     name: string;
     quantity?: number;
@@ -79,6 +80,7 @@ Extract structured data and respond ONLY with JSON matching this schema:
 {
   "vendor": string | null,
   "totalAmount": number | null,
+  "purchasedAt": string | null,
   "items": [
     {
       "name": string,
@@ -90,6 +92,7 @@ Extract structured data and respond ONLY with JSON matching this schema:
 }
 Rules:
 - totalAmount must be the grand total (including tax if shown as final payment).
+- purchasedAt = date and time of purchase printed on the receipt (NOT upload time), ISO-8601 like "2024-03-15T14:32:00". If only a date is visible, use noon local time. If unreadable, null.
 - quantity = number of pieces/units (default 1 if unknown).
 - unitPrice = price per unit; totalPrice = quantity * unitPrice (or line total on receipt).
 - Use a dot as decimal separator.
@@ -209,9 +212,18 @@ Rules:
     ? normalizeReceiptItems(parsed.items)
     : [];
 
+  let purchasedAt: string | null = null;
+  if (typeof parsed.purchasedAt === "string" && parsed.purchasedAt.trim()) {
+    const d = new Date(parsed.purchasedAt.trim());
+    if (!Number.isNaN(d.getTime())) {
+      purchasedAt = d.toISOString();
+    }
+  }
+
   return NextResponse.json({
     vendor,
     totalAmount,
+    purchasedAt,
     items,
   });
 }

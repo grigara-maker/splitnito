@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { formatCzk } from "@/lib/iban";
-import type { SettlementSummary } from "@/lib/settlement";
+import {
+  normalizeSettlementSummary,
+  type SettlementSummary,
+} from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HistoryPage() {
@@ -23,7 +26,7 @@ export default async function HistoryPage() {
     .maybeSingle();
 
   if (!profile) {
-    redirect("/register");
+    redirect("/onboarding");
   }
 
   const { data: events } = await supabase
@@ -36,7 +39,7 @@ export default async function HistoryPage() {
   const eventIds = (events ?? []).map((e) => e.id);
   const settlementByEvent = new Map<
     string,
-    { summary_data: SettlementSummary; closed_at: string }
+    { summary: SettlementSummary; closed_at: string }
   >();
 
   if (eventIds.length > 0) {
@@ -47,7 +50,7 @@ export default async function HistoryPage() {
 
     for (const row of settlements ?? []) {
       settlementByEvent.set(row.event_id, {
-        summary_data: row.summary_data as unknown as SettlementSummary,
+        summary: normalizeSettlementSummary(row.summary_data),
         closed_at: row.closed_at,
       });
     }
@@ -72,8 +75,9 @@ export default async function HistoryPage() {
         <ul className="grid gap-3">
           {(events ?? []).map((event) => {
             const settlement = settlementByEvent.get(event.id);
-            const summary = settlement?.summary_data;
+            const summary = settlement?.summary;
             const closedAt = settlement?.closed_at;
+            const done = summary?.allPaid ?? false;
 
             return (
               <li key={event.id}>
@@ -82,9 +86,11 @@ export default async function HistoryPage() {
                   className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:ring-primary/30"
                 >
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">{event.name}</p>
-                      <Badge variant="outline">Uzavřená</Badge>
+                      <Badge variant={done ? "secondary" : "outline"}>
+                        {done ? "Hotovo" : "Čeká na platby"}
+                      </Badge>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {closedAt

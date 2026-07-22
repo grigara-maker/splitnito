@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { AlertTriangle, ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
+import { deleteReceiptAction } from "@/lib/actions/events";
 import { formatCzk } from "@/lib/iban";
 import {
-  normalizeReceiptItems,
-  type ReceiptItem,
-} from "@/lib/types/database";
+  amountsMismatch,
+  itemsSum,
+} from "@/lib/settlement";
+import { normalizeReceiptItems, type ReceiptItem } from "@/lib/types/database";
+import { ReceiptForm } from "@/components/app/receipt-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -21,15 +26,14 @@ export type ReceiptRow = {
   vendor: string;
   total_amount: number;
   created_at: string;
+  purchased_at: string | null;
   image_url: string | null;
   user_id: string;
   items?: unknown;
   profiles: { name: string } | { name: string }[] | null;
 };
 
-function profileName(
-  profiles: ReceiptRow["profiles"]
-): string {
+function profileName(profiles: ReceiptRow["profiles"]): string {
   if (Array.isArray(profiles)) return profiles[0]?.name ?? "Neznámý";
   return profiles?.name ?? "Neznámý";
 }
@@ -49,9 +53,24 @@ function formatDateTime(iso: string) {
   };
 }
 
-export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
+export function ReceiptsOverview({
+  receipts,
+  eventId,
+  currentUserId,
+  isCompanyAdmin,
+  eventActive,
+}: {
+  receipts: ReceiptRow[];
+  eventId: string;
+  currentUserId: string;
+  isCompanyAdmin: boolean;
+  eventActive: boolean;
+}) {
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const vendors = useMemo(() => {
     const set = new Set(receipts.map((r) => r.vendor));
@@ -86,7 +105,14 @@ export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
   const selectedItems: ReceiptItem[] = selected
     ? normalizeReceiptItems(selected.items)
     : [];
-  const selectedWhen = selected ? formatDateTime(selected.created_at) : null;
+  const purchaseWhen = selected
+    ? formatDateTime(selected.purchased_at ?? selected.created_at)
+    : null;
+  const uploadedWhen = selected ? formatDateTime(selected.created_at) : null;
+  const canManageSelected =
+    selected &&
+    eventActive &&
+    (selected.user_id === currentUserId || isCompanyAdmin);
 
   if (receipts.length === 0) {
     return (
@@ -106,10 +132,7 @@ export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
           </p>
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor="vendor-filter"
-            className="text-xs text-muted-foreground"
-          >
+          <label htmlFor="vendor-filter" className="text-xs text-muted-foreground">
             Filtr dodavatel
           </label>
           <select
@@ -140,19 +163,34 @@ export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
             </div>
             <ul className="divide-y divide-border/50">
               {group.items.map((r) => {
-                const when = formatDateTime(r.created_at);
+                const when = formatDateTime(r.purchased_at ?? r.created_at);
+                const lineItems = normalizeReceiptItems(r.items);
+                const mismatch =
+                  lineItems.length > 0 &&
+                  amountsMismatch(itemsSum(lineItems), Number(r.total_amount));
                 return (
                   <li key={r.id}>
                     <button
                       type="button"
-                      onClick={() => setSelected(r)}
+                      onClick={() => {
+                        setActionError(null);
+                        setSelected(r);
+                      }}
                       className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
                     >
-                      <div>
-                        <p className="font-medium">{r.vendor}</p>
-                        <p className="text-muted-foreground">
-                          {when.date} · {when.time}
-                        </p>
+                      <div className="flex items-start gap-2">
+                        {mismatch ? (
+                          <AlertTriangle
+                            className="mt-0.5 size-4 shrink-0 text-destructive"
+                            aria-label="Nesedí součet položek"
+                          />
+                        ) : null}
+                        <div>
+                          <p className="font-medium">{r.vendor}</p>
+                          <p className="text-muted-foreground">
+                            {when.date} · {when.time}
+                          </p>
+                        </div>
                       </div>
                       <span className="font-medium">
                         {formatCzk(Number(r.total_amount))}
@@ -169,95 +207,198 @@ export function ReceiptsOverview({ receipts }: { receipts: ReceiptRow[] }) {
       <Dialog
         open={selected != null}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) {
+            setSelected(null);
+            setEditing(false);
+          }
         }}
       >
-        <DialogContent className="sm:max-w-lg" showCloseButton>
-          {selected && selectedWhen ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>{selected.vendor}</DialogTitle>
-                <DialogDescription>
-                  Detail dokladu · {profileName(selected.profiles)}
-                </DialogDescription>
-              </DialogHeader>
-
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">Datum</dt>
-                  <dd className="font-medium">{selectedWhen.date}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Čas</dt>
-                  <dd className="font-medium">{selectedWhen.time}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Dodavatel</dt>
-                  <dd className="font-medium">{selected.vendor}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Celkem</dt>
-                  <dd className="font-medium">
-                    {formatCzk(Number(selected.total_amount))}
-                  </dd>
-                </div>
-              </dl>
-
-              <div>
-                <p className="mb-2 text-sm font-medium">Položky</p>
-                {selectedItems.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Bez rozpisu položek.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto rounded-lg ring-1 ring-foreground/10">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-muted/50 text-xs text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2 font-medium">Název</th>
-                          <th className="px-3 py-2 font-medium text-right">
-                            Počet
-                          </th>
-                          <th className="px-3 py-2 font-medium text-right">
-                            Cena / ks
-                          </th>
-                          <th className="px-3 py-2 font-medium text-right">
-                            Celkem
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {selectedItems.map((item, idx) => (
-                          <tr key={`${item.name}-${idx}`}>
-                            <td className="px-3 py-2">{item.name}</td>
-                            <td className="px-3 py-2 text-right">
-                              {item.quantity}
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {formatCzk(item.unitPrice)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-medium">
-                              {formatCzk(item.totalPrice)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {selected.image_url ? (
-                <a
-                  href={selected.image_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        <DialogContent
+          className={editing ? "sm:max-w-2xl" : "sm:max-w-lg"}
+          showCloseButton
+        >
+          {selected && purchaseWhen && uploadedWhen ? (
+            editing && canManageSelected ? (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Upravit doklad</DialogTitle>
+                  <DialogDescription>
+                    {selected.vendor} · {profileName(selected.profiles)}
+                  </DialogDescription>
+                </DialogHeader>
+                <ReceiptForm
+                  eventId={eventId}
+                  initialReceipt={{
+                    id: selected.id,
+                    vendor: selected.vendor,
+                    totalAmount: Number(selected.total_amount),
+                    purchasedAt: selected.purchased_at,
+                    imageUrl: selected.image_url,
+                    items: selected.items,
+                  }}
+                  onSaved={() => {
+                    setEditing(false);
+                    setSelected(null);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditing(false)}
                 >
-                  Otevřít fotku účtenky
-                </a>
-              ) : null}
-            </>
+                  <ArrowLeft />
+                  Zpět na detail
+                </Button>
+              </>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{selected.vendor}</DialogTitle>
+                  <DialogDescription>
+                    Detail dokladu · {profileName(selected.profiles)}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">Datum nákupu</dt>
+                    <dd className="font-medium">{purchaseWhen.date}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Čas nákupu</dt>
+                    <dd className="font-medium">{purchaseWhen.time}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Nahráno do Splitnito</dt>
+                    <dd className="font-medium">
+                      {uploadedWhen.date} · {uploadedWhen.time}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Dodavatel</dt>
+                    <dd className="font-medium">{selected.vendor}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-muted-foreground">Celkem</dt>
+                    <dd className="flex items-center gap-2 font-medium">
+                      {formatCzk(Number(selected.total_amount))}
+                      {selectedItems.length > 0 &&
+                      amountsMismatch(
+                        itemsSum(selectedItems),
+                        Number(selected.total_amount)
+                      ) ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-destructive">
+                          <AlertTriangle className="size-3.5" />
+                          Součet položek nesedí
+                        </span>
+                      ) : null}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium">Položky</p>
+                  {selectedItems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Bez rozpisu položek.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg ring-1 ring-foreground/10">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-muted/50 text-xs text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 font-medium">Název</th>
+                            <th className="px-3 py-2 text-right font-medium">
+                              Počet
+                            </th>
+                            <th className="px-3 py-2 text-right font-medium">
+                              Cena / ks
+                            </th>
+                            <th className="px-3 py-2 text-right font-medium">
+                              Celkem
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {selectedItems.map((item, idx) => (
+                            <tr key={`${item.name}-${idx}`}>
+                              <td className="px-3 py-2">{item.name}</td>
+                              <td className="px-3 py-2 text-right">
+                                {item.quantity}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {formatCzk(item.unitPrice)}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium">
+                                {formatCzk(item.totalPrice)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {selected.image_url ? (
+                  <a
+                    href={selected.image_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Otevřít fotku účtenky
+                  </a>
+                ) : null}
+
+                {actionError ? (
+                  <p className="text-sm text-destructive">{actionError}</p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelected(null)}
+                  >
+                    <ArrowLeft />
+                    Zpět
+                  </Button>
+                  {canManageSelected ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setEditing(true)}
+                      >
+                        <Pencil />
+                        Upravit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={pending}
+                        onClick={() => {
+                          if (!selected) return;
+                          if (!confirm("Opravdu smazat tento doklad?")) return;
+                          startTransition(async () => {
+                            const result = await deleteReceiptAction(
+                              selected.id,
+                              eventId
+                            );
+                            if (result.error) setActionError(result.error);
+                            else setSelected(null);
+                          });
+                        }}
+                      >
+                        <Trash2 />
+                        Smazat doklad
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </>
+            )
           ) : null}
         </DialogContent>
       </Dialog>

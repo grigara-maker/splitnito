@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { calculateSettlement } from "@/lib/settlement";
+import {
+  calculateSettlement,
+  normalizeSettlementSummary,
+} from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 import type { Json, ReceiptItem } from "@/lib/types/database";
 import { normalizeReceiptItems } from "@/lib/types/database";
@@ -63,23 +66,20 @@ export async function createEventAction(
   redirect(`/events/${data.id}`);
 }
 
-export async function createReceiptAction(
-  _prev: ActionState,
-  formData: FormData
-): Promise<ActionState> {
-  const eventId = String(formData.get("eventId") ?? "");
+function parseReceiptFields(formData: FormData) {
   const vendor = String(formData.get("vendor") ?? "").trim();
   const amountRaw = String(formData.get("totalAmount") ?? "").trim();
   const itemsRaw = String(formData.get("items") ?? "").trim();
   const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null;
+  const purchasedAtRaw = String(formData.get("purchasedAt") ?? "").trim();
 
-  if (!eventId || !vendor || !amountRaw) {
-    return { error: "Dodavatel a částka jsou povinné." };
+  if (!vendor || !amountRaw) {
+    return { error: "Dodavatel a částka jsou povinné." as const };
   }
 
   const totalAmount = Number(amountRaw.replace(",", "."));
   if (Number.isNaN(totalAmount) || totalAmount < 0) {
-    return { error: "Neplatná částka." };
+    return { error: "Neplatná částka." as const };
   }
 
   let items: ReceiptItem[] | null = null;
@@ -89,9 +89,31 @@ export async function createReceiptAction(
       const normalized = normalizeReceiptItems(parsed);
       items = normalized.length > 0 ? normalized : null;
     } catch {
-      return { error: "Neplatný formát položek." };
+      return { error: "Neplatný formát položek." as const };
     }
   }
+
+  let purchasedAt: string | null = null;
+  if (purchasedAtRaw) {
+    const d = new Date(purchasedAtRaw);
+    if (Number.isNaN(d.getTime())) {
+      return { error: "Neplatné datum nákupu." as const };
+    }
+    purchasedAt = d.toISOString();
+  }
+
+  return { vendor, totalAmount, items, imageUrl, purchasedAt };
+}
+
+export async function createReceiptAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!eventId) return { error: "Chybí akce." };
+
+  const parsed = parseReceiptFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
 
   const { supabase, user } = await requireProfile();
 
@@ -108,10 +130,11 @@ export async function createReceiptAction(
   const { error } = await supabase.from("receipts").insert({
     event_id: eventId,
     user_id: user.id,
-    vendor,
-    total_amount: totalAmount,
-    items: items as Json | null,
-    image_url: imageUrl,
+    vendor: parsed.vendor,
+    total_amount: parsed.totalAmount,
+    items: parsed.items as Json | null,
+    image_url: parsed.imageUrl,
+    purchased_at: parsed.purchasedAt ?? new Date().toISOString(),
   });
 
   if (error) {
@@ -120,6 +143,77 @@ export async function createReceiptAction(
 
   revalidatePath(`/events/${eventId}`);
   return { success: "Doklad byl uložen." };
+}
+
+export async function updateReceiptAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const receiptId = String(formData.get("receiptId") ?? "");
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!receiptId || !eventId) return { error: "Chybí doklad." };
+
+  const parsed = parseReceiptFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+
+  const { supabase, user, profile } = await requireProfile();
+
+  const { data: receipt } = await supabase
+    .from("receipts")
+    .select("id, user_id, event_id")
+    .eq("id", receiptId)
+    .maybeSingle();
+
+  if (!receipt) return { error: "Doklad nenalezen." };
+
+  const canEdit =
+    receipt.user_id === user.id || profile.role === "company";
+  if (!canEdit) {
+    return { error: "Nemáte oprávnění upravit tento doklad." };
+  }
+
+  const { error } = await supabase
+    .from("receipts")
+    .update({
+      vendor: parsed.vendor,
+      total_amount: parsed.totalAmount,
+      items: parsed.items as Json | null,
+      image_url: parsed.imageUrl,
+      purchased_at: parsed.purchasedAt,
+    })
+    .eq("id", receiptId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  return { success: "Doklad byl upraven." };
+}
+
+export async function deleteReceiptAction(
+  receiptId: string,
+  eventId: string
+): Promise<ActionState> {
+  const { supabase, user, profile } = await requireProfile();
+
+  const { data: receipt } = await supabase
+    .from("receipts")
+    .select("id, user_id")
+    .eq("id", receiptId)
+    .maybeSingle();
+
+  if (!receipt) return { error: "Doklad nenalezen." };
+
+  const canDelete =
+    receipt.user_id === user.id || profile.role === "company";
+  if (!canDelete) {
+    return { error: "Nemáte oprávnění smazat tento doklad." };
+  }
+
+  const { error } = await supabase.from("receipts").delete().eq("id", receiptId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  return { success: "Doklad byl smazán." };
 }
 
 export async function closeEventAction(eventId: string): Promise<ActionState> {
@@ -143,7 +237,10 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
       .from("profiles")
       .select("id, name, iban")
       .eq("company_id", profile.company_id),
-    supabase.from("receipts").select("user_id, total_amount").eq("event_id", eventId),
+    supabase
+      .from("receipts")
+      .select("user_id, total_amount")
+      .eq("event_id", eventId),
   ]);
 
   if (!members?.length) {
@@ -188,5 +285,103 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/dashboard");
   revalidatePath("/history");
-  return { success: "Akce byla uzavřena." };
+  return { success: "Vyúčtování bylo uzavřeno." };
+}
+
+export async function reopenEventAction(eventId: string): Promise<ActionState> {
+  const { supabase, profile } = await requireProfile();
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .single();
+
+  if (!event || event.company_id !== profile.company_id) {
+    return { error: "Akce nenalezena." };
+  }
+  if (event.status !== "closed") {
+    return { error: "Akce není uzavřená." };
+  }
+
+  const { data: settlement } = await supabase
+    .from("settlements")
+    .select("summary_data")
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (settlement?.summary_data) {
+    const summary = normalizeSettlementSummary(settlement.summary_data);
+    if (summary.allPaid && summary.transfers.length > 0) {
+      return {
+        error:
+          "Vyúčtování je už kompletně zaplacené a nelze ho znovu otevřít.",
+      };
+    }
+  }
+
+  await supabase.from("settlements").delete().eq("event_id", eventId);
+
+  const { error } = await supabase
+    .from("events")
+    .update({ status: "active" })
+    .eq("id", eventId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/history");
+  return { success: "Akce byla znovu otevřena." };
+}
+
+export async function confirmPaymentAction(
+  eventId: string,
+  transferId: string
+): Promise<ActionState> {
+  const { supabase, user, profile } = await requireProfile();
+
+  const { data: settlement } = await supabase
+    .from("settlements")
+    .select("id, summary_data")
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (!settlement?.summary_data) {
+    return { error: "Vyúčtování nenalezeno." };
+  }
+
+  const summary = normalizeSettlementSummary(settlement.summary_data);
+  const transfer = summary.transfers.find((t) => t.id === transferId);
+
+  if (!transfer) {
+    return { error: "Platba nenalezena." };
+  }
+
+  // Potvrdit může příjemce, nebo admin firmy
+  if (transfer.toUserId !== user.id && profile.role !== "company") {
+    return { error: "Potvrdit platbu může jen příjemce." };
+  }
+
+  summary.transfers = summary.transfers.map((t) =>
+    t.id === transferId ? { ...t, status: "confirmed" as const } : t
+  );
+  summary.allPaid =
+    summary.transfers.length === 0 ||
+    summary.transfers.every((t) => t.status === "confirmed");
+
+  const { error } = await supabase
+    .from("settlements")
+    .update({ summary_data: summary as unknown as Json })
+    .eq("id", settlement.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/history");
+  return {
+    success: summary.allPaid
+      ? "Všechny platby potvrzeny — vyúčtování je hotové."
+      : "Platba potvrzena.",
+  };
 }

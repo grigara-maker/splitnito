@@ -1,10 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 
-import { createReceiptAction, type ActionState } from "@/lib/actions/events";
+import {
+  createReceiptAction,
+  updateReceiptAction,
+  type ActionState,
+} from "@/lib/actions/events";
 import { createClient } from "@/lib/supabase/client";
+import { itemsSum } from "@/lib/settlement";
 import type { ReceiptItem } from "@/lib/types/database";
 import { normalizeReceiptItems } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
@@ -19,6 +24,15 @@ type DraftItem = {
   quantity: string;
   unitPrice: string;
   totalPrice: string;
+};
+
+export type ReceiptFormInitial = {
+  id: string;
+  vendor: string;
+  totalAmount: number;
+  purchasedAt: string | null;
+  imageUrl: string | null;
+  items?: unknown;
 };
 
 function emptyItem(): DraftItem {
@@ -42,32 +56,88 @@ function toDraft(items: ReceiptItem[]): DraftItem[] {
   }));
 }
 
-export function ReceiptForm({ eventId }: { eventId: string }) {
-  const [state, formAction, pending] = useActionState(
-    createReceiptAction,
-    initial
+function draftsToItems(items: DraftItem[]): ReceiptItem[] {
+  return items
+    .filter((item) => item.name.trim())
+    .map((item) => {
+      const quantity = Number(String(item.quantity).replace(",", ".")) || 1;
+      const unitPrice = Number(String(item.unitPrice).replace(",", ".")) || 0;
+      const totalPrice =
+        Number(String(item.totalPrice).replace(",", ".")) ||
+        quantity * unitPrice;
+      return {
+        name: item.name.trim(),
+        quantity,
+        unitPrice,
+        totalPrice: Math.round(totalPrice * 100) / 100,
+      };
+    });
+}
+
+function toDatetimeLocalValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function ReceiptForm({
+  eventId,
+  initialReceipt,
+  onSaved,
+}: {
+  eventId: string;
+  initialReceipt?: ReceiptFormInitial;
+  onSaved?: () => void;
+}) {
+  const isEdit = Boolean(initialReceipt);
+  const action = isEdit ? updateReceiptAction : createReceiptAction;
+  const [state, formAction, pending] = useActionState(action, initial);
+  const [vendor, setVendor] = useState(initialReceipt?.vendor ?? "");
+  const [totalAmount, setTotalAmount] = useState(
+    initialReceipt ? String(initialReceipt.totalAmount) : ""
   );
-  const [vendor, setVendor] = useState("");
-  const [totalAmount, setTotalAmount] = useState("");
-  const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
-  const [imageUrl, setImageUrl] = useState("");
+  const [totalManual, setTotalManual] = useState(Boolean(initialReceipt));
+  const [purchasedAt, setPurchasedAt] = useState(() => {
+    if (initialReceipt?.purchasedAt) {
+      const d = new Date(initialReceipt.purchasedAt);
+      if (!Number.isNaN(d.getTime())) return toDatetimeLocalValue(d);
+    }
+    return toDatetimeLocalValue(new Date());
+  });
+  const [items, setItems] = useState<DraftItem[]>(() =>
+    toDraft(normalizeReceiptItems(initialReceipt?.items))
+  );
+  const [imageUrl, setImageUrl] = useState(initialReceipt?.imageUrl ?? "");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  const computedItems = useMemo(() => draftsToItems(items), [items]);
+  const itemsTotal = useMemo(() => itemsSum(computedItems), [computedItems]);
+
+  useEffect(() => {
+    if (!totalManual && computedItems.length > 0) {
+      setTotalAmount(String(itemsTotal));
+    }
+  }, [itemsTotal, computedItems.length, totalManual]);
+
   useEffect(() => {
     if (state.success) {
-      setVendor("");
-      setTotalAmount("");
-      setItems([emptyItem()]);
-      setImageUrl("");
-      setOcrWarning(null);
-      setUploadError(null);
-      formRef.current?.reset();
+      onSaved?.();
+      if (!isEdit) {
+        setVendor("");
+        setTotalAmount("");
+        setTotalManual(false);
+        setPurchasedAt(toDatetimeLocalValue(new Date()));
+        setItems([emptyItem()]);
+        setImageUrl("");
+        setOcrWarning(null);
+        setUploadError(null);
+        formRef.current?.reset();
+      }
     }
-  }, [state.success]);
+  }, [state.success, isEdit, onSaved]);
 
   function updateItem(
     key: string,
@@ -138,9 +208,19 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
       }
 
       if (json.vendor) setVendor(json.vendor);
-      if (json.totalAmount != null) setTotalAmount(String(json.totalAmount));
+      if (json.purchasedAt) {
+        const d = new Date(json.purchasedAt);
+        if (!Number.isNaN(d.getTime())) {
+          setPurchasedAt(toDatetimeLocalValue(d));
+        }
+      }
       if (Array.isArray(json.items) && json.items.length > 0) {
         setItems(toDraft(normalizeReceiptItems(json.items)));
+        setTotalManual(false);
+      }
+      if (json.totalAmount != null) {
+        setTotalAmount(String(json.totalAmount));
+        setTotalManual(true);
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Nahrání selhalo");
@@ -150,25 +230,14 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
     }
   }
 
-  const itemsJson = JSON.stringify(
-    items
-      .filter((item) => item.name.trim())
-      .map((item) => ({
-        name: item.name.trim(),
-        quantity: Number(String(item.quantity).replace(",", ".")) || 1,
-        unitPrice: Number(String(item.unitPrice).replace(",", ".")) || 0,
-        totalPrice:
-          Number(String(item.totalPrice).replace(",", ".")) ||
-          (Number(String(item.quantity).replace(",", ".")) || 1) *
-            (Number(String(item.unitPrice).replace(",", ".")) || 0),
-      }))
-  );
-
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="eventId" value={eventId} />
+      {initialReceipt ? (
+        <input type="hidden" name="receiptId" value={initialReceipt.id} />
+      ) : null}
       <input type="hidden" name="imageUrl" value={imageUrl} />
-      <input type="hidden" name="items" value={itemsJson} />
+      <input type="hidden" name="items" value={JSON.stringify(computedItems)} />
 
       <div className="flex flex-col gap-2">
         <Label>Fotka / soubor účtenky</Label>
@@ -204,17 +273,31 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="vendor">Dodavatel</Label>
-        <Input
-          id="vendor"
-          name="vendor"
-          required
-          value={vendor}
-          onChange={(e) => setVendor(e.target.value)}
-          placeholder="Albert"
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="vendor">Dodavatel</Label>
+          <Input
+            id="vendor"
+            name="vendor"
+            required
+            value={vendor}
+            onChange={(e) => setVendor(e.target.value)}
+            placeholder="Albert"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="purchasedAt">Datum a čas nákupu</Label>
+          <Input
+            id="purchasedAt"
+            name="purchasedAt"
+            type="datetime-local"
+            required
+            value={purchasedAt}
+            onChange={(e) => setPurchasedAt(e.target.value)}
+          />
+        </div>
       </div>
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="totalAmount">Celková částka (Kč)</Label>
         <Input
@@ -223,14 +306,23 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
           required
           inputMode="decimal"
           value={totalAmount}
-          onChange={(e) => setTotalAmount(e.target.value)}
+          onChange={(e) => {
+            setTotalManual(true);
+            setTotalAmount(e.target.value);
+          }}
           placeholder="1250.50"
         />
+        {computedItems.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Součet položek: {itemsTotal.toFixed(2)} Kč
+            {!totalManual ? " (automaticky)" : ""}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
-          <Label>Položky (volitelné)</Label>
+          <Label>Položky</Label>
           <Button
             type="button"
             variant="outline"
@@ -241,6 +333,10 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
             Přidat položku
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Po OCR můžete chybějící položky dopsat ručně. Při změně položek se
+          přepočítá celková částka.
+        </p>
 
         <div className="flex flex-col gap-3">
           {items.map((item, index) => (
@@ -266,7 +362,6 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
                   onChange={(e) =>
                     updateItem(item.key, "quantity", e.target.value)
                   }
-                  placeholder="1"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -277,7 +372,6 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
                   onChange={(e) =>
                     updateItem(item.key, "unitPrice", e.target.value)
                   }
-                  placeholder="89"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -288,7 +382,6 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
                   onChange={(e) =>
                     updateItem(item.key, "totalPrice", e.target.value)
                   }
-                  placeholder="89"
                 />
               </div>
               <div className="flex items-end">
@@ -322,7 +415,11 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
       ) : null}
 
       <Button type="submit" disabled={pending || ocrLoading}>
-        {pending ? "Ukládám…" : "Uložit doklad"}
+        {pending
+          ? "Ukládám…"
+          : isEdit
+            ? "Uložit změny"
+            : "Uložit doklad"}
       </Button>
     </form>
   );

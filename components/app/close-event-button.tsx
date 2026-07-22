@@ -19,7 +19,7 @@ export function CloseEventButton({ eventId }: { eventId: string }) {
         onClick={() => {
           if (
             !confirm(
-              "Opravdu uzavřít akci? Doklady už nepůjde upravovat a vypočítá se vyúčtování."
+              "Opravdu uzavřít vyúčtování? Doklady se zamknou a vypočítají se platby."
             )
           ) {
             return;
@@ -34,7 +34,7 @@ export function CloseEventButton({ eventId }: { eventId: string }) {
           });
         }}
       >
-        {pending ? "Uzavírám…" : "Uzavřít akci"}
+        {pending ? "Uzavírám…" : "Uzavřít vyúčtování"}
       </Button>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
