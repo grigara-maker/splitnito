@@ -12,11 +12,14 @@ export function LoadingLink({
   className,
   children,
   spinner = "md",
+  layout = "inline",
 }: {
   href: string;
   className?: string;
   children: React.ReactNode;
   spinner?: "sm" | "md";
+  /** inline = navbar/tlačítka, block = karty (zachová původní formátování) */
+  layout?: "inline" | "block";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -37,10 +40,7 @@ export function LoadingLink({
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
           return;
         }
-        if (pathname === href || pathname.startsWith(href + "/")) {
-          // už jsme na cílové stránce — jen jemné potvrzení
-          if (pathname === href) return;
-        }
+        if (pathname === href) return;
         e.preventDefault();
         if (loading) return;
         setClicked(true);
@@ -49,7 +49,14 @@ export function LoadingLink({
         });
       }}
     >
-      <span className={cn("inline-flex items-center justify-center gap-[inherit]", loading && "invisible")}>
+      <span
+        className={cn(
+          loading && "invisible",
+          layout === "block"
+            ? "block w-full"
+            : "inline-flex items-center justify-center gap-[inherit]"
+        )}
+      >
         {children}
       </span>
       {loading ? (

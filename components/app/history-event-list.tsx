@@ -18,6 +18,7 @@ export function HistoryEventList({ events }: { events: HistoryItem[] }) {
         <li key={event.id}>
           <LoadingLink
             href={`/events/${event.id}`}
+            layout="block"
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:ring-primary/30"
           >
             <div>

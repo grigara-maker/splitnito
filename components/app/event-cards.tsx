@@ -18,6 +18,7 @@ export function EventCards({ events }: { events: EventCard[] }) {
         <li key={event.id}>
           <LoadingLink
             href={`/events/${event.id}`}
+            layout="block"
             className="block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:shadow-md hover:ring-primary/30"
           >
             <div className="flex items-start justify-between gap-2">
