@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { formatCzk } from "@/lib/iban";
 import {
+  isEventArchived,
   normalizeSettlementSummary,
   type SettlementSummary,
 } from "@/lib/settlement";
@@ -29,14 +30,14 @@ export default async function HistoryPage() {
     redirect("/onboarding");
   }
 
-  const { data: events } = await supabase
+  const { data: closedEvents } = await supabase
     .from("events")
-    .select("id, name, created_at")
+    .select("id, name, created_at, status")
     .eq("company_id", profile.company_id)
     .eq("status", "closed")
     .order("created_at", { ascending: false });
 
-  const eventIds = (events ?? []).map((e) => e.id);
+  const eventIds = (closedEvents ?? []).map((e) => e.id);
   const settlementByEvent = new Map<
     string,
     { summary: SettlementSummary; closed_at: string }
@@ -56,6 +57,10 @@ export default async function HistoryPage() {
     }
   }
 
+  const events = (closedEvents ?? []).filter((event) =>
+    isEventArchived(event.status, settlementByEvent.get(event.id)?.summary)
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -63,21 +68,20 @@ export default async function HistoryPage() {
           Historie
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Archiv uzavřených akcí a vyúčtování.
+          Archiv akcí, u kterých je vyúčtování kompletně zaplacené.
         </p>
       </div>
 
-      {(events ?? []).length === 0 ? (
+      {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Zatím žádné uzavřené akce.
+          Zatím žádné dokončené (zaplacené) akce.
         </p>
       ) : (
         <ul className="grid gap-3">
-          {(events ?? []).map((event) => {
+          {events.map((event) => {
             const settlement = settlementByEvent.get(event.id);
             const summary = settlement?.summary;
             const closedAt = settlement?.closed_at;
-            const done = summary?.allPaid ?? false;
 
             return (
               <li key={event.id}>
@@ -88,9 +92,7 @@ export default async function HistoryPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">{event.name}</p>
-                      <Badge variant={done ? "secondary" : "outline"}>
-                        {done ? "Hotovo" : "Čeká na platby"}
-                      </Badge>
+                      <Badge variant="secondary">Hotovo</Badge>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {closedAt

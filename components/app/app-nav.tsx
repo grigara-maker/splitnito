@@ -12,6 +12,7 @@ type EventOption = {
   id: string;
   name: string;
   status: string;
+  waitingPayment?: boolean;
 };
 
 export function AppNav({
@@ -28,13 +29,13 @@ export function AppNav({
   const pathname = usePathname();
   const router = useRouter();
 
-  const activeEvents = events.filter((e) => e.status === "active");
+  // events už přicházejí jen ongoing (aktivní + čeká na platby)
   const eventMatch = pathname.match(/^\/events\/([^/]+)/);
   const showEventSwitcher = Boolean(eventMatch);
   const currentEventId =
-    eventMatch?.[1] && activeEvents.some((e) => e.id === eventMatch[1])
+    eventMatch?.[1] && events.some((e) => e.id === eventMatch[1])
       ? eventMatch[1]
-      : (activeEvents[0]?.id ?? "");
+      : (events[0]?.id ?? "");
 
   return (
     <header className="sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur-md">
@@ -53,7 +54,7 @@ export function AppNav({
         </div>
 
         <div className="flex flex-1 items-center justify-end gap-2 sm:gap-3">
-          {showEventSwitcher && activeEvents.length > 0 ? (
+          {showEventSwitcher && events.length > 0 ? (
             <>
               <label className="sr-only" htmlFor="event-switcher">
                 Aktivní akce
@@ -67,9 +68,11 @@ export function AppNav({
                   if (id) router.push(`/events/${id}`);
                 }}
               >
-                {activeEvents.map((event) => (
+                {events.map((event) => (
                   <option key={event.id} value={event.id}>
-                    {event.name}
+                    {event.waitingPayment
+                      ? `${event.name} (platby)`
+                      : event.name}
                   </option>
                 ))}
               </select>

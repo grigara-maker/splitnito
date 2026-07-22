@@ -91,6 +91,13 @@ export default async function EventPage({
     }
   }
 
+  const waitingPayment = Boolean(
+    event.status === "closed" && settlement && !settlement.allPaid
+  );
+  const archived = Boolean(
+    event.status === "closed" && settlement?.allPaid
+  );
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -99,8 +106,22 @@ export default async function EventPage({
             <h1 className="font-heading text-3xl font-semibold tracking-tight">
               {event.name}
             </h1>
-            <Badge variant={event.status === "active" ? "secondary" : "outline"}>
-              {event.status === "active" ? "Aktivní" : "Uzavřená"}
+            <Badge
+              variant={
+                event.status === "active"
+                  ? "secondary"
+                  : waitingPayment
+                    ? "outline"
+                    : "secondary"
+              }
+            >
+              {event.status === "active"
+                ? "Aktivní"
+                : waitingPayment
+                  ? "Čeká na platby"
+                  : archived
+                    ? "Hotovo"
+                    : "Uzavřená"}
             </Badge>
           </div>
           <p className="mt-1 text-muted-foreground">

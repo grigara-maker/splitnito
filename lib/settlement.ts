@@ -162,10 +162,27 @@ export function itemsSum(items: { totalPrice: number }[]): number {
 
 export function amountsMismatch(
   itemsTotal: number,
-  receiptTotal: number,
-  tolerance = 0.02
+  receiptTotal: number
 ): boolean {
-  if (!itemsTotal && itemsTotal !== 0) return false;
-  // Only warn when there are items
-  return Math.abs(itemsTotal - receiptTotal) > tolerance;
+  // Varování jen při rozdílu ≥ 1 Kč — haléře ignorujeme
+  return Math.abs(itemsTotal - receiptTotal) >= 1;
+}
+
+/** Akce je ještě „živá“: otevřená, nebo uzavřená a čeká na platby. */
+export function isEventOngoing(
+  status: string,
+  settlement: SettlementSummary | null | undefined
+): boolean {
+  if (status === "active") return true;
+  if (status !== "closed") return false;
+  if (!settlement) return true;
+  return !settlement.allPaid;
+}
+
+/** Do historie až po úplném zaplacení. */
+export function isEventArchived(
+  status: string,
+  settlement: SettlementSummary | null | undefined
+): boolean {
+  return status === "closed" && Boolean(settlement?.allPaid);
 }

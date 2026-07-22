@@ -13,6 +13,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatCzk } from "@/lib/iban";
+import {
+  isEventOngoing,
+  normalizeSettlementSummary,
+  type SettlementSummary,
+} from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -33,21 +38,43 @@ export default async function DashboardPage() {
     .maybeSingle();
 
   if (!profile) {
-    redirect("/register");
+    redirect("/onboarding");
   }
 
-  const { data: events, error: eventsError } = await supabase
+  const { data: allEvents, error: eventsError } = await supabase
     .from("events")
     .select("id, name, status, created_at")
     .eq("company_id", profile.company_id)
-    .eq("status", "active")
     .order("created_at", { ascending: false });
 
   if (eventsError) {
     console.error("events query failed", eventsError);
   }
 
-  const eventIds = (events ?? []).map((e) => e.id);
+  const closedIds = (allEvents ?? [])
+    .filter((e) => e.status === "closed")
+    .map((e) => e.id);
+
+  const settlementByEvent = new Map<string, SettlementSummary>();
+  if (closedIds.length > 0) {
+    const { data: settlements } = await supabase
+      .from("settlements")
+      .select("event_id, summary_data")
+      .in("event_id", closedIds);
+
+    for (const row of settlements ?? []) {
+      settlementByEvent.set(
+        row.event_id,
+        normalizeSettlementSummary(row.summary_data)
+      );
+    }
+  }
+
+  const events = (allEvents ?? []).filter((e) =>
+    isEventOngoing(e.status, settlementByEvent.get(e.id))
+  );
+
+  const eventIds = events.map((e) => e.id);
   const totals = new Map<string, number>();
 
   if (eventIds.length > 0) {
@@ -72,7 +99,7 @@ export default async function DashboardPage() {
             Dashboard
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Aktivní akce a společné výdaje ve Splitnito.
+            Aktivní akce a akce čekající na platby ve Splitnito.
           </p>
         </div>
       </div>
@@ -82,7 +109,7 @@ export default async function DashboardPage() {
           <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Aktivní akce
           </h2>
-          {(events ?? []).length === 0 ? (
+          {events.length === 0 ? (
             <Card>
               <CardHeader>
                 <CardTitle>Zatím žádná akce</CardTitle>
@@ -94,25 +121,34 @@ export default async function DashboardPage() {
             </Card>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
-              {(events ?? []).map((event) => (
-                <li key={event.id}>
-                  <Link
-                    href={`/events/${event.id}`}
-                    className="block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:shadow-md hover:ring-primary/30"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium text-foreground">{event.name}</p>
-                      <Badge variant="secondary">Aktivní</Badge>
-                    </div>
-                    <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
-                      {formatCzk(totals.get(event.id) ?? 0)}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Celková útrata
-                    </p>
-                  </Link>
-                </li>
-              ))}
+              {events.map((event) => {
+                const waiting =
+                  event.status === "closed" &&
+                  !settlementByEvent.get(event.id)?.allPaid;
+                return (
+                  <li key={event.id}>
+                    <Link
+                      href={`/events/${event.id}`}
+                      className="block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:shadow-md hover:ring-primary/30"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-foreground">
+                          {event.name}
+                        </p>
+                        <Badge variant={waiting ? "outline" : "secondary"}>
+                          {waiting ? "Čeká na platby" : "Aktivní"}
+                        </Badge>
+                      </div>
+                      <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+                        {formatCzk(totals.get(event.id) ?? 0)}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Celková útrata
+                      </p>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -137,7 +173,7 @@ export default async function DashboardPage() {
               href="/history"
               className={cn(buttonVariants({ variant: "outline" }), "w-full")}
             >
-              Historie uzavřených akcí
+              Historie zaplacených akcí
             </Link>
           </div>
         </aside>

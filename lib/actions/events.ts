@@ -393,6 +393,7 @@ export async function confirmPaymentAction(
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/history");
+  revalidatePath("/dashboard");
   return {
     success: summary.allPaid
       ? "Všechny platby potvrzeny — vyúčtování je hotové."
