@@ -9,7 +9,25 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  let supabase;
+  try {
+    supabase = await createClient();
+  } catch (error) {
+    console.error(error);
+    return (
+      <div className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-20 text-center">
+        <h1 className="font-heading text-2xl font-semibold">
+          Chybí konfigurace Splitnito
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Nastavte <code>NEXT_PUBLIC_SUPABASE_URL</code> a{" "}
+          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> ve Vercelu a proveďte
+          redeploy.
+        </p>
+      </div>
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -18,18 +36,15 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("id, name, company_id")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profileError) {
-    console.error("profiles query failed", profileError);
-  }
-
+  // Bez profilu → onboarding (mimo tento layout, bez redirect smyčky)
   if (!profile) {
-    redirect("/register");
+    redirect("/onboarding");
   }
 
   const [{ data: company }, { data: events }] = await Promise.all([

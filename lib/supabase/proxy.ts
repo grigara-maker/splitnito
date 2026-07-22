@@ -7,66 +7,69 @@ import type { Database } from "@/lib/types/database";
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  let supabaseUrl: string;
-  let supabaseKey: string;
-  try {
-    supabaseUrl = getSupabaseUrl();
-    supabaseKey = getSupabaseAnonKey();
-  } catch {
+  const supabaseUrl = getSupabaseUrl();
+  const supabaseKey = getSupabaseAnonKey();
+  if (!supabaseUrl || !supabaseKey) {
     return supabaseResponse;
   }
 
-  const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  try {
+    const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value)
-        );
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
-      },
-    },
-  });
+    });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isAuthRoute =
-    path.startsWith("/login") || path.startsWith("/register");
-  const isProtected =
-    path.startsWith("/dashboard") ||
-    path.startsWith("/profile") ||
-    path.startsWith("/events") ||
-    path.startsWith("/history") ||
-    path.startsWith("/api/");
+    const path = request.nextUrl.pathname;
+    const isAuthRoute =
+      path.startsWith("/login") || path.startsWith("/register");
+    const isProtected =
+      path.startsWith("/dashboard") ||
+      path.startsWith("/profile") ||
+      path.startsWith("/events") ||
+      path.startsWith("/history") ||
+      path.startsWith("/onboarding") ||
+      path.startsWith("/api/");
 
-  if (!user && isProtected) {
-    if (path.startsWith("/api/")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user && isProtected) {
+      if (path.startsWith("/api/")) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
     }
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
 
-  if (user && isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
+    if (user && isAuthRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
 
-  if (user && path === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
+    if (user && path === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
 
-  return supabaseResponse;
+    return supabaseResponse;
+  } catch (error) {
+    console.error("proxy updateSession failed", error);
+    return NextResponse.next({ request });
+  }
 }
