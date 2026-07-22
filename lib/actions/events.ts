@@ -115,7 +115,14 @@ export async function createReceiptAction(
   const parsed = parseReceiptFields(formData);
   if ("error" in parsed) return { error: parsed.error };
 
-  const { supabase, user } = await requireProfile();
+  const { supabase, user, profile } = await requireProfile();
+
+  if (profile.role === "company") {
+    return {
+      error:
+        "Správce firmy nemůže přidávat doklady. Doklady nahrávají jen uživatelé.",
+    };
+  }
 
   const { data: event } = await supabase
     .from("events")
@@ -232,11 +239,13 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
     return { error: "Akce je už uzavřená." };
   }
 
+  // Vyúčtování jen mezi uživateli (ne správcem firmy)
   const [{ data: members }, { data: receipts }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, name, iban")
-      .eq("company_id", profile.company_id),
+      .select("id, name, iban, role")
+      .eq("company_id", profile.company_id)
+      .eq("role", "member"),
     supabase
       .from("receipts")
       .select("user_id, total_amount")
@@ -244,11 +253,16 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
   ]);
 
   if (!members?.length) {
-    return { error: "Firma nemá žádné členy." };
+    return {
+      error:
+        "Pro vyúčtování potřebujete alespoň jednoho uživatele ve firmě (ne správce).",
+    };
   }
 
+  const memberIds = new Set(members.map((m) => m.id));
   const paidByUser = new Map<string, number>();
   for (const r of receipts ?? []) {
+    if (!memberIds.has(r.user_id)) continue;
     paidByUser.set(
       r.user_id,
       (paidByUser.get(r.user_id) ?? 0) + Number(r.total_amount)
@@ -339,7 +353,7 @@ export async function confirmPaymentAction(
   eventId: string,
   transferId: string
 ): Promise<ActionState> {
-  const { supabase, user, profile } = await requireProfile();
+  const { supabase, user } = await requireProfile();
 
   const { data: settlement } = await supabase
     .from("settlements")
@@ -358,8 +372,8 @@ export async function confirmPaymentAction(
     return { error: "Platba nenalezena." };
   }
 
-  // Potvrdit může příjemce, nebo admin firmy
-  if (transfer.toUserId !== user.id && profile.role !== "company") {
+  // QR platby jen mezi uživateli — potvrzuje příjemce
+  if (transfer.toUserId !== user.id) {
     return { error: "Potvrdit platbu může jen příjemce." };
   }
 

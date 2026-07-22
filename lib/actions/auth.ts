@@ -17,7 +17,6 @@ export async function loginAction(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const accountType = String(formData.get("accountType") ?? "member");
 
   if (!email || !password) {
     return { error: "Vyplňte e-mail i heslo." };
@@ -30,25 +29,6 @@ export async function loginAction(
     return { error: "Neplatné přihlašovací údaje." };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profile) {
-      const expected = accountType === "company" ? "company" : "member";
-      if (profile.role !== expected) {
-        // Soft warning path: still allow login, UI is role-based anyway
-      }
-    }
-  }
-
   redirect("/dashboard");
 }
 
@@ -58,33 +38,38 @@ export async function registerAction(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  const ibanRaw = String(formData.get("iban") ?? "").trim();
   const accountType = String(formData.get("accountType") ?? "member");
   const companyName = String(formData.get("companyName") ?? "").trim();
   const inviteCode = String(formData.get("inviteCode") ?? "").trim();
+  const memberName = String(formData.get("name") ?? "").trim();
+  const ibanRaw = String(formData.get("iban") ?? "").trim();
 
-  if (!email || !password || !name) {
-    return { error: "Vyplňte jméno, e-mail a heslo." };
+  if (!email || !password) {
+    return { error: "Vyplňte e-mail a heslo." };
   }
   if (password.length < 6) {
     return { error: "Heslo musí mít alespoň 6 znaků." };
   }
 
-  if (accountType === "company" && !companyName) {
-    return { error: "Zadejte název firmy." };
-  }
-  if (accountType === "member" && !inviteCode) {
-    return { error: "Zadejte kód firmy, ke které se připojujete." };
+  if (accountType === "company") {
+    if (!companyName) return { error: "Zadejte název firmy." };
+  } else {
+    if (!memberName) return { error: "Zadejte své jméno." };
+    if (!inviteCode) {
+      return { error: "Zadejte kód firmy, ke které se připojujete." };
+    }
   }
 
   let iban: string | null = null;
-  if (ibanRaw) {
+  if (accountType === "member" && ibanRaw) {
     if (!isValidIban(ibanRaw)) {
       return { error: "IBAN není platný. Zkontrolujte formát." };
     }
     iban = normalizeIban(ibanRaw);
   }
+
+  const displayName =
+    accountType === "company" ? companyName : memberName;
 
   const supabase = await createClient();
 
@@ -92,7 +77,7 @@ export async function registerAction(
     email,
     password,
     options: {
-      data: { name, accountType },
+      data: { name: displayName, accountType },
     },
   });
 
@@ -115,8 +100,8 @@ export async function registerAction(
   }
 
   const { error: setupError } = await supabase.rpc("complete_user_setup", {
-    p_name: name,
-    p_iban: iban,
+    p_name: displayName,
+    p_iban: accountType === "member" ? iban : null,
     p_invite_code: accountType === "member" ? inviteCode : null,
     p_company_name: accountType === "company" ? companyName : null,
     p_role: accountType === "company" ? "company" : "member",
@@ -153,14 +138,6 @@ export async function updateProfileAction(
     return { error: "Jméno je povinné." };
   }
 
-  let iban: string | null = null;
-  if (ibanRaw) {
-    if (!isValidIban(ibanRaw)) {
-      return { error: "IBAN není platný." };
-    }
-    iban = normalizeIban(ibanRaw);
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -168,6 +145,30 @@ export async function updateProfileAction(
 
   if (!user) {
     return { error: "Nejste přihlášeni." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    return { error: "Profil nenalezen." };
+  }
+
+  if (profile.role === "company") {
+    return {
+      error: "Správce firmy mění název v sekci Firma, ne osobní jméno.",
+    };
+  }
+
+  let iban: string | null = null;
+  if (ibanRaw) {
+    if (!isValidIban(ibanRaw)) {
+      return { error: "IBAN není platný." };
+    }
+    iban = normalizeIban(ibanRaw);
   }
 
   const { error } = await supabase
@@ -179,7 +180,61 @@ export async function updateProfileAction(
     return { error: error.message };
   }
 
+  revalidatePath("/profile");
   return { success: "Profil byl uložen." };
+}
+
+export async function updateCompanyNameAction(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const companyName = String(formData.get("companyName") ?? "").trim();
+  if (!companyName) {
+    return { error: "Název firmy je povinný." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Nejste přihlášeni." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile || profile.role !== "company") {
+    return { error: "Název firmy může měnit jen správce." };
+  }
+
+  const { error: companyError } = await supabase
+    .from("companies")
+    .update({ name: companyName })
+    .eq("id", profile.company_id);
+
+  if (companyError) {
+    return { error: companyError.message };
+  }
+
+  // Správce se jmenuje jako firma
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({ name: companyName, iban: null })
+    .eq("id", user.id);
+
+  if (profileError) {
+    return { error: profileError.message };
+  }
+
+  revalidatePath("/company");
+  revalidatePath("/profile");
+  revalidatePath("/dashboard");
+  return { success: "Název firmy byl uložen." };
 }
 
 export async function removeMemberAction(

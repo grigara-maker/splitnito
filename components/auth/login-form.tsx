@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 
 import { loginAction, type AuthState } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -14,38 +14,22 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const initial: AuthState = {};
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initial);
-  const [accountType, setAccountType] = useState<"company" | "member">(
-    "member"
-  );
 
   return (
     <Card className="w-full max-w-md bg-card/90 shadow-lg shadow-primary/5 backdrop-blur-md">
       <CardHeader>
         <CardTitle className="font-heading text-2xl">Přihlášení</CardTitle>
         <CardDescription>
-          Přihlaste se jako firma, nebo jako uživatel Splitnito.
+          Přihlaste se do svého účtu ve Splitnito.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-4">
-          <input type="hidden" name="accountType" value={accountType} />
-
-          <Tabs
-            value={accountType}
-            onValueChange={(v) => setAccountType(v as "company" | "member")}
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="company">Jsem firma</TabsTrigger>
-              <TabsTrigger value="member">Jsem uživatel</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
           <div className="flex flex-col gap-2">
             <Label htmlFor="email">E-mail</Label>
             <Input

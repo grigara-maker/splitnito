@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { CompanyNameForm } from "@/components/app/company-name-form";
 import { RemoveMemberButton } from "@/components/app/remove-member-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -51,19 +52,20 @@ export default async function CompanyPage() {
           Nastavení firmy
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Spravujte kód firmy a uživatele ve Splitnito.
+          Správce firmy — bez IBAN a bez vlastních dokladů. Vyúčtování běží mezi
+          uživateli.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>{company?.name ?? "Firma"}</CardTitle>
+          <CardTitle>Firma</CardTitle>
           <CardDescription>
-            Sdílejte kód nebo odkaz — uživatelé se při registraci přidají k
-            firmě.
+            Název účtu správce je stejný jako název firmy.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-6">
+          <CompanyNameForm companyName={company?.name ?? ""} />
           <div>
             <p className="text-sm text-muted-foreground">Kód firmy</p>
             <p className="mt-1 font-mono text-2xl tracking-wider">

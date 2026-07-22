@@ -38,8 +38,16 @@ export function transferKey(t: {
 }
 
 /**
- * Equal split among all company members.
- * balance = paid - average (positive = credit / receives, negative = debt / pays)
+ * Férové dělení mezi uživateli (equal split).
+ *
+ * Každý má platit průměr (total / počet uživatelů).
+ * balance = zaplaceno − průměr
+ *   > 0 → má dostat (přeplatil)
+ *   < 0 → má doplatit
+ *
+ * 2 uživatelé: kdo zaplatil míň, pošle druhému přesně rozdíl / 2
+ *   (tj. doplatí, aby oba měli stejnou útratu).
+ * Více uživatelů: greedy pairing dlužníků a věřitelů (min. počet převodů).
  */
 export function calculateSettlement(
   members: { userId: string; name: string; iban: string | null; paid: number }[]

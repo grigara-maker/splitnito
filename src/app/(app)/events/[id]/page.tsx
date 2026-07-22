@@ -125,7 +125,7 @@ export default async function EventPage({
         />
       </section>
 
-      {event.status === "active" ? (
+      {event.status === "active" && !isCompanyAdmin ? (
         <Card>
           <CardHeader>
             <CardTitle>Přidat doklad</CardTitle>
@@ -138,6 +138,13 @@ export default async function EventPage({
             <ReceiptForm eventId={event.id} />
           </CardContent>
         </Card>
+      ) : null}
+
+      {event.status === "active" && isCompanyAdmin ? (
+        <p className="text-sm text-muted-foreground">
+          Jako správce firmy vidíte všechny doklady a můžete je upravit nebo
+          smazat. Přidávat doklady mohou jen uživatelé.
+        </p>
       ) : null}
 
       {settlement ? (

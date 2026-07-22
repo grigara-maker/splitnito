@@ -62,7 +62,11 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[linear-gradient(180deg,oklch(0.985_0.01_200)_0%,oklch(0.96_0.015_190)_100%)]">
       <AppNav
-        profileName={profile.name}
+        profileName={
+          profile.role === "company"
+            ? (company?.name ?? profile.name)
+            : profile.name
+        }
         companyName={company?.name ?? "Firma"}
         events={events ?? []}
         isCompanyAdmin={profile.role === "company"}

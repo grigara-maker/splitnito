@@ -51,7 +51,8 @@ export function RegisterForm({
 
             <TabsContent value="company" className="mt-4 space-y-4">
               <p className="text-sm text-muted-foreground">
-                Založíte firmu a získáte kód pro pozvání kolegů.
+                Účet správce se jmenuje podle firmy. Doklady přidávají jen
+                uživatelé — firma spravuje akce a vyúčtování.
               </p>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="companyName">Název firmy</Label>
@@ -66,8 +67,8 @@ export function RegisterForm({
 
             <TabsContent value="member" className="mt-4 space-y-4">
               <p className="text-sm text-muted-foreground">
-                Zadejte kód firmy od administrátora — účet se k firmě trvale
-                přidruží.
+                Zadejte kód firmy — účet se k ní trvale přidruží. Doklady a QR
+                platby probíhají mezi uživateli.
               </p>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="inviteCode">Kód firmy</Label>
@@ -80,15 +81,29 @@ export function RegisterForm({
                   className="uppercase"
                 />
               </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="name">Vaše jméno</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  required={accountType === "member"}
+                  placeholder="Jan Novák"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="iban">IBAN (volitelné)</Label>
+                <Input
+                  id="iban"
+                  name="iban"
+                  placeholder="CZ65 0800 0000 0012 3456 7890"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pro příjem QR plateb při vyúčtování.
+                </p>
+              </div>
             </TabsContent>
           </Tabs>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="name">
-              {accountType === "company" ? "Jméno správce" : "Vaše jméno"}
-            </Label>
-            <Input id="name" name="name" required placeholder="Jan Novák" />
-          </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="email">E-mail</Label>
             <Input
@@ -110,14 +125,6 @@ export function RegisterForm({
               minLength={6}
               autoComplete="new-password"
               placeholder="min. 6 znaků"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="iban">IBAN (volitelné)</Label>
-            <Input
-              id="iban"
-              name="iban"
-              placeholder="CZ65 0800 0000 0012 3456 7890"
             />
           </div>
 

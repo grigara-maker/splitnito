@@ -41,17 +41,6 @@ export function OnboardingForm({
         />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="name">Jméno a příjmení</Label>
-        <Input
-          id="name"
-          name="name"
-          required
-          defaultValue={defaultName ?? ""}
-          placeholder="Jan Novák"
-        />
-      </div>
-
       <Tabs
         value={accountType}
         onValueChange={(v) => setAccountType(v as "company" | "member")}
@@ -63,7 +52,7 @@ export function OnboardingForm({
 
         <TabsContent value="company" className="mt-4 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Založíte profil firmy a získáte kód pro pozvání kolegů.
+            Správce se jmenuje podle firmy. Doklady přidávají jen uživatelé.
           </p>
           <div className="flex flex-col gap-2">
             <Label htmlFor="companyName">Název firmy</Label>
@@ -72,6 +61,7 @@ export function OnboardingForm({
               name="companyName"
               placeholder="Moje s.r.o."
               required={accountType === "company"}
+              defaultValue={defaultName ?? ""}
             />
           </div>
         </TabsContent>
@@ -80,6 +70,16 @@ export function OnboardingForm({
           <p className="text-sm text-muted-foreground">
             Zadejte kód firmy — účet se k ní trvale přidruží.
           </p>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="name">Vaše jméno</Label>
+            <Input
+              id="name"
+              name="name"
+              required={accountType === "member"}
+              defaultValue={defaultName ?? ""}
+              placeholder="Jan Novák"
+            />
+          </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="inviteCode">Kód firmy</Label>
             <Input
@@ -90,20 +90,19 @@ export function OnboardingForm({
               className="uppercase"
             />
           </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="iban">IBAN (pro QR platby)</Label>
+            <Input
+              id="iban"
+              name="iban"
+              placeholder="CZ65 0800 0000 0012 3456 7890"
+            />
+            <p className="text-xs text-muted-foreground">
+              Volitelné — doplníte později v profilu.
+            </p>
+          </div>
         </TabsContent>
       </Tabs>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="iban">IBAN (pro QR platby)</Label>
-        <Input
-          id="iban"
-          name="iban"
-          placeholder="CZ65 0800 0000 0012 3456 7890"
-        />
-        <p className="text-xs text-muted-foreground">
-          Volitelné — doplníte později v profilu.
-        </p>
-      </div>
 
       {state.error ? (
         <p className="text-sm text-destructive" role="alert">

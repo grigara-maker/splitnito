@@ -15,12 +15,12 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, iban, company_id")
+    .select("name, iban, company_id, role")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!profile) {
-    redirect("/register");
+    redirect("/onboarding");
   }
 
   const { data: company } = await supabase
@@ -29,6 +29,8 @@ export default async function ProfilePage() {
     .eq("id", profile.company_id)
     .maybeSingle();
 
+  const isCompanyAdmin = profile.role === "company";
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -36,7 +38,9 @@ export default async function ProfilePage() {
           Profil
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Upravte jméno a IBAN pro vyúčtování ve Splitnito.
+          {isCompanyAdmin
+            ? "Účet správce firmy ve Splitnito."
+            : "Upravte jméno a IBAN pro QR platby mezi uživateli."}
         </p>
       </div>
       <ProfileForm
@@ -44,6 +48,7 @@ export default async function ProfilePage() {
         iban={profile.iban}
         inviteCode={company?.invite_code ?? "—"}
         companyName={company?.name ?? "—"}
+        isCompanyAdmin={isCompanyAdmin}
       />
     </div>
   );

@@ -62,13 +62,13 @@ export function SettlementView({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Celkem utraceno" value={formatCzk(summary.totalAmount)} />
-        <Stat label="Počet společníků" value={String(summary.memberCount)} />
-        <Stat label="Průměr na osobu" value={formatCzk(summary.averageShare)} />
+        <Stat label="Počet uživatelů" value={String(summary.memberCount)} />
+        <Stat label="Stejný podíl" value={formatCzk(summary.averageShare)} />
       </div>
 
       <section>
         <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Přehled členů
+          Přehled uživatelů
         </h3>
         <ul className="divide-y divide-border/70 rounded-xl bg-card ring-1 ring-foreground/10">
           {summary.members.map((m) => (
