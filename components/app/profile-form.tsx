@@ -15,38 +15,16 @@ export function ProfileForm({
   iban,
   inviteCode,
   companyName,
-  isCompanyAdmin,
 }: {
   name: string;
   iban: string | null;
   inviteCode: string;
   companyName: string;
-  isCompanyAdmin: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     updateProfileAction,
     initial
   );
-
-  if (isCompanyAdmin) {
-    return (
-      <div className="flex max-w-lg flex-col gap-8">
-        <div className="rounded-xl bg-muted/50 p-4 ring-1 ring-foreground/5">
-          <p className="text-sm text-muted-foreground">Účet správce firmy</p>
-          <p className="mt-1 font-medium">{companyName}</p>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Invite kód pro kolegy
-          </p>
-          <p className="mt-1 font-mono text-lg tracking-wider">{inviteCode}</p>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Název firmy upravíte v sekci Firma. IBAN a doklady mají jen
-            uživatelé.
-          </p>
-        </div>
-        <DeleteAccountForm mode="company" companyName={companyName} />
-      </div>
-    );
-  }
 
   return (
     <div className="flex max-w-lg flex-col gap-8">

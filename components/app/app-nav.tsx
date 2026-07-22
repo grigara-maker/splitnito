@@ -79,23 +79,6 @@ export function AppNav({
             </>
           ) : null}
 
-          {isCompanyAdmin ? (
-            <Link
-              href="/company"
-              className={cn(
-                buttonVariants({
-                  variant: pathname.startsWith("/company")
-                    ? "secondary"
-                    : "ghost",
-                  size: "sm",
-                })
-              )}
-            >
-              <Building2 />
-              <span className="hidden sm:inline">Firma</span>
-            </Link>
-          ) : null}
-
           <Link
             href="/history"
             className={cn(
@@ -108,18 +91,40 @@ export function AppNav({
             <Archive />
             <span className="hidden sm:inline">Historie</span>
           </Link>
-          <Link
-            href="/profile"
-            className={cn(
-              buttonVariants({
-                variant: pathname.startsWith("/profile") ? "secondary" : "ghost",
-                size: "sm",
-              })
-            )}
-          >
-            <UserRound />
-            <span className="hidden sm:inline">{profileName}</span>
-          </Link>
+
+          {isCompanyAdmin ? (
+            <Link
+              href="/company"
+              className={cn(
+                buttonVariants({
+                  variant:
+                    pathname.startsWith("/company") ||
+                    pathname.startsWith("/profile")
+                      ? "secondary"
+                      : "ghost",
+                  size: "sm",
+                })
+              )}
+            >
+              <Building2 />
+              <span className="hidden sm:inline">Nastavení</span>
+            </Link>
+          ) : (
+            <Link
+              href="/profile"
+              className={cn(
+                buttonVariants({
+                  variant: pathname.startsWith("/profile")
+                    ? "secondary"
+                    : "ghost",
+                  size: "sm",
+                })
+              )}
+            >
+              <UserRound />
+              <span className="hidden sm:inline">{profileName}</span>
+            </Link>
+          )}
           <form action={signOutAction}>
             <Button
               type="submit"

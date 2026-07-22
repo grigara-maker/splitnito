@@ -27,7 +27,7 @@ export default async function CompanyPage() {
     .maybeSingle();
 
   if (!profile) redirect("/onboarding");
-  if (profile.role !== "company") redirect("/dashboard");
+  if (profile.role !== "company") redirect("/profile");
 
   const { data: company } = await supabase
     .from("companies")
@@ -50,11 +50,10 @@ export default async function CompanyPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
-          Nastavení firmy
+          Nastavení
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Správce firmy — bez IBAN a bez vlastních dokladů. Vyúčtování běží mezi
-          uživateli.
+          Profil správce firmy ve Splitnito — název, pozvánky, uživatelé.
         </p>
       </div>
 
@@ -62,7 +61,8 @@ export default async function CompanyPage() {
         <CardHeader>
           <CardTitle>Firma</CardTitle>
           <CardDescription>
-            Název účtu správce je stejný jako název firmy.
+            Účet správce se jmenuje podle firmy. Doklady a IBAN mají jen
+            uživatelé.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -79,8 +79,6 @@ export default async function CompanyPage() {
           </div>
         </CardContent>
       </Card>
-
-      <DeleteAccountForm mode="company" companyName={company?.name ?? ""} />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
@@ -110,6 +108,8 @@ export default async function CompanyPage() {
           ))}
         </ul>
       </section>
+
+      <DeleteAccountForm mode="company" companyName={company?.name ?? ""} />
     </div>
   );
 }
