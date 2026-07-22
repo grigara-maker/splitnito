@@ -87,71 +87,28 @@ export async function registerAction(
     };
   }
 
-  const userId = signUpData.user.id;
-  let companyId: string;
-
-  if (mode === "join") {
-    if (!inviteCode) {
-      return { error: "Zadejte invite kód firmy." };
-    }
-
-    const { data: companies, error: inviteError } = await supabase.rpc(
-      "get_company_by_invite",
-      { code: inviteCode }
-    );
-
-    if (inviteError || !companies?.length) {
-      const message = inviteError?.message ?? "";
-      if (/invalid path/i.test(message)) {
-        return {
-          error:
-            "Špatná Supabase URL. Použijte Project URL bez /rest/v1 (Settings → API).",
-        };
-      }
-      return { error: "Invite kód není platný." };
-    }
-
-    companyId = companies[0].id;
-  } else {
-    if (!companyName) {
-      return { error: "Zadejte název firmy." };
-    }
-
-    const { data: company, error: companyError } = await supabase
-      .from("companies")
-      .insert({ name: companyName })
-      .select("id")
-      .single();
-
-    if (companyError || !company) {
-      const message =
-        companyError?.message ??
-        "Firmu se nepodařilo vytvořit. Zkontrolujte databázi.";
-      if (/invalid path/i.test(message)) {
-        return {
-          error:
-            "Špatná Supabase URL. Použijte Project URL bez /rest/v1 (Settings → API).",
-        };
-      }
-      return { error: message };
-    }
-
-    companyId = company.id;
-  }
-
-  const { error: profileError } = await supabase.from("profiles").insert({
-    id: userId,
-    company_id: companyId,
-    name,
-    iban,
+  const { error: setupError } = await supabase.rpc("complete_user_setup", {
+    p_name: name,
+    p_iban: iban,
+    p_invite_code: mode === "join" ? inviteCode || null : null,
+    p_company_name: mode === "create" ? companyName || null : null,
   });
 
-  if (profileError) {
-    return {
-      error:
-        profileError.message ??
-        "Profil se nepodařilo vytvořit. Kontaktujte podporu.",
-    };
+  if (setupError) {
+    const message = setupError.message;
+    if (/invalid path/i.test(message)) {
+      return {
+        error:
+          "Špatná Supabase URL. Použijte Project URL bez /rest/v1 (Settings → API).",
+      };
+    }
+    if (/Could not find the function|schema cache/i.test(message)) {
+      return {
+        error:
+          "V Supabase chybí funkce complete_user_setup. Spusťte SQL ze souboru supabase/fix_rls_setup.sql.",
+      };
+    }
+    return { error: message };
   }
 
   redirect("/dashboard");

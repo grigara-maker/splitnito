@@ -182,6 +182,15 @@ export type Database = {
         Args: { code: string };
         Returns: { id: string; name: string }[];
       };
+      complete_user_setup: {
+        Args: {
+          p_name: string;
+          p_iban?: string | null;
+          p_invite_code?: string | null;
+          p_company_name?: string | null;
+        };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
