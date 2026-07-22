@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isValidIban, normalizeIban } from "@/lib/iban";
+import {
+  createServiceClient,
+  storagePathFromPublicUrl,
+} from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = {
@@ -255,4 +259,93 @@ export async function removeMemberAction(
 
   revalidatePath("/company");
   return { success: "Uživatel byl odstraněn." };
+}
+
+export async function deleteAccountAction(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const confirm = String(formData.get("confirm") ?? "").trim();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Nejste přihlášeni." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, company_id, name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    return { error: "Profil nenalezen." };
+  }
+
+  if (profile.role === "company") {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name")
+      .eq("id", profile.company_id)
+      .maybeSingle();
+
+    const expected = company?.name?.trim() ?? "";
+    if (!expected || confirm !== expected) {
+      return {
+        error: "Pro smazání firmy zadejte přesný název firmy jako potvrzení.",
+      };
+    }
+
+    // Smazat všechny soubory ve storage firmy (vyžaduje SERVICE_ROLE)
+    const { data: events } = await supabase
+      .from("events")
+      .select("id")
+      .eq("company_id", profile.company_id);
+
+    const eventIds = (events ?? []).map((e) => e.id);
+    if (eventIds.length > 0) {
+      const { data: receipts } = await supabase
+        .from("receipts")
+        .select("image_url")
+        .in("event_id", eventIds);
+
+      const paths = (receipts ?? [])
+        .map((r) => storagePathFromPublicUrl(r.image_url))
+        .filter((p): p is string => Boolean(p));
+
+      const admin = createServiceClient();
+      if (admin && paths.length > 0) {
+        // Storage remove max ~1000; batch
+        for (let i = 0; i < paths.length; i += 100) {
+          await admin.storage.from("receipts").remove(paths.slice(i, i + 100));
+        }
+      }
+    }
+  } else if (confirm.toUpperCase() !== "SMAZAT") {
+    return {
+      error: 'Pro smazání účtu napište SMAZAT do potvrzovacího pole.',
+    };
+  }
+
+  const { data: result, error } = await supabase.rpc("delete_own_account");
+
+  if (error) {
+    if (/Could not find the function|schema cache/i.test(error.message)) {
+      return {
+        error:
+          "V Supabase chybí funkce delete_own_account. Spusťte SQL supabase/migration_delete_account.sql.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  await supabase.auth.signOut();
+
+  if (result === "company") {
+    redirect("/?deleted=company");
+  }
+  redirect("/?deleted=account");
 }

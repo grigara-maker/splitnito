@@ -28,7 +28,8 @@ export type ReceiptRow = {
   created_at: string;
   purchased_at: string | null;
   image_url: string | null;
-  user_id: string;
+  user_id: string | null;
+  uploader_name?: string | null;
   items?: unknown;
   profiles: { name: string } | { name: string }[] | null;
 };
@@ -90,14 +91,15 @@ export function ReceiptsOverview({
       { name: string; items: ReceiptRow[]; sum: number }
     >();
     for (const r of filtered) {
-      const entry = map.get(r.user_id) ?? {
+      const key = r.user_id ?? `anon:${r.uploader_name ?? profileName(r.profiles)}`;
+      const entry = map.get(key) ?? {
         name: profileName(r.profiles),
         items: [],
         sum: 0,
       };
       entry.items.push(r);
       entry.sum += Number(r.total_amount);
-      map.set(r.user_id, entry);
+      map.set(key, entry);
     }
     return Array.from(map.values()).sort((a, b) => b.sum - a.sum);
   }, [filtered]);
@@ -112,7 +114,8 @@ export function ReceiptsOverview({
   const canManageSelected =
     selected &&
     eventActive &&
-    (selected.user_id === currentUserId || isCompanyAdmin);
+    ((selected.user_id != null && selected.user_id === currentUserId) ||
+      isCompanyAdmin);
 
   if (receipts.length === 0) {
     return (

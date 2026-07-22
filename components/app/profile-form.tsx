@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 
 import { updateProfileAction, type AuthState } from "@/lib/actions/auth";
+import { DeleteAccountForm } from "@/components/app/delete-account-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,7 @@ export function ProfileForm({
             uživatelé.
           </p>
         </div>
+        <DeleteAccountForm mode="company" companyName={companyName} />
       </div>
     );
   }
@@ -86,6 +88,8 @@ export function ProfileForm({
           {pending ? "Ukládám…" : "Uložit profil"}
         </Button>
       </form>
+
+      <DeleteAccountForm mode="member" />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { CompanyNameForm } from "@/components/app/company-name-form";
+import { DeleteAccountForm } from "@/components/app/delete-account-form";
 import { RemoveMemberButton } from "@/components/app/remove-member-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -78,6 +79,8 @@ export default async function CompanyPage() {
           </div>
         </CardContent>
       </Card>
+
+      <DeleteAccountForm mode="company" companyName={company?.name ?? ""} />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">

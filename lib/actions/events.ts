@@ -137,6 +137,7 @@ export async function createReceiptAction(
   const { error } = await supabase.from("receipts").insert({
     event_id: eventId,
     user_id: user.id,
+    uploader_name: profile.name,
     vendor: parsed.vendor,
     total_amount: parsed.totalAmount,
     items: parsed.items as Json | null,
@@ -262,7 +263,7 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
   const memberIds = new Set(members.map((m) => m.id));
   const paidByUser = new Map<string, number>();
   for (const r of receipts ?? []) {
-    if (!memberIds.has(r.user_id)) continue;
+    if (!r.user_id || !memberIds.has(r.user_id)) continue;
     paidByUser.set(
       r.user_id,
       (paidByUser.get(r.user_id) ?? 0) + Number(r.total_amount)

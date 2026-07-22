@@ -52,13 +52,17 @@ export default async function EventPage({
   const { data: receiptsRaw } = await supabase
     .from("receipts")
     .select(
-      "id, vendor, total_amount, created_at, purchased_at, image_url, user_id, items"
+      "id, vendor, total_amount, created_at, purchased_at, image_url, user_id, uploader_name, items"
     )
     .eq("event_id", id)
     .order("created_at", { ascending: false });
 
   const userIds = Array.from(
-    new Set((receiptsRaw ?? []).map((r) => r.user_id))
+    new Set(
+      (receiptsRaw ?? [])
+        .map((r) => r.user_id)
+        .filter((id): id is string => Boolean(id))
+    )
   );
   const nameByUser = new Map<string, string>();
 
@@ -75,7 +79,12 @@ export default async function EventPage({
 
   const receipts = (receiptsRaw ?? []).map((r) => ({
     ...r,
-    profiles: { name: nameByUser.get(r.user_id) ?? "Neznámý" },
+    profiles: {
+      name:
+        (r.user_id ? nameByUser.get(r.user_id) : null) ??
+        r.uploader_name ??
+        "Bývalý uživatel",
+    },
   }));
 
   const isCompanyAdmin = profile.role === "company";

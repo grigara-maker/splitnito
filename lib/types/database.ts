@@ -101,7 +101,8 @@ export type Database = {
         Row: {
           id: string;
           event_id: string;
-          user_id: string;
+          user_id: string | null;
+          uploader_name: string | null;
           vendor: string;
           total_amount: number;
           items: Json | null;
@@ -112,7 +113,8 @@ export type Database = {
         Insert: {
           id?: string;
           event_id: string;
-          user_id: string;
+          user_id?: string | null;
+          uploader_name?: string | null;
           vendor: string;
           total_amount: number;
           items?: Json | null;
@@ -123,7 +125,8 @@ export type Database = {
         Update: {
           id?: string;
           event_id?: string;
-          user_id?: string;
+          user_id?: string | null;
+          uploader_name?: string | null;
           vendor?: string;
           total_amount?: number;
           items?: Json | null;
@@ -205,6 +208,10 @@ export type Database = {
       remove_company_member: {
         Args: { p_user_id: string };
         Returns: undefined;
+      };
+      delete_own_account: {
+        Args: Record<string, never>;
+        Returns: string;
       };
     };
     Enums: Record<string, never>;
