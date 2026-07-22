@@ -9,13 +9,17 @@ type OcrResult = {
 };
 
 /**
- * Prefer env override, then try a few Flash models (quota / availability).
+ * Free-tier limity (Google AI Studio): gemini-2.0-flash má často 0/0 → 429.
+ * Preferuj 2.5 / 3.x Flash Lite, které mají reálnou RPD kvótu.
+ * Override: GEMINI_OCR_MODEL ve Vercelu.
  */
 const GEMINI_MODELS = [
   process.env.GEMINI_OCR_MODEL?.trim(),
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3-flash",
+  "gemini-3.6-flash",
 ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
 export async function POST(request: Request) {
@@ -130,7 +134,7 @@ Rules:
       return NextResponse.json(
         {
           error:
-            "OCR dočasně nedostupné — vyčerpala se kvóta Gemini API (429). Doklad můžete vyplnit ručně; quota se obvykle obnoví druhý den, nebo zapněte billing v Google AI Studio.",
+            "OCR: Gemini odmítlo požadavek (429). U free tieru má model gemini-2.0-flash často limit 0 — aplikace teď používá gemini-2.5-flash-lite. Zkontrolujte GEMINI_API_KEY a model v projektu Splitnito, případně nastavte GEMINI_OCR_MODEL=gemini-2.5-flash-lite. Mezitím můžete doklad vyplnit ručně.",
           code: "QUOTA_EXCEEDED",
         },
         { status: 429 }
