@@ -162,10 +162,11 @@ export function itemsSum(items: { totalPrice: number }[]): number {
 
 export function amountsMismatch(
   itemsTotal: number,
-  receiptTotal: number
+  receiptTotal: number,
+  allowedDeviation = 1
 ): boolean {
-  // Varování jen při rozdílu ≥ 1 Kč — haléře ignorujeme
-  return Math.abs(itemsTotal - receiptTotal) >= 1;
+  // Varování až když rozdíl překročí povolenou odchylku (výchozí 1 Kč)
+  return Math.abs(itemsTotal - receiptTotal) > allowedDeviation;
 }
 
 /** Akce je ještě „živá“: otevřená, nebo uzavřená a čeká na platby. */

@@ -1,0 +1,12 @@
+---
+description: Po dokončení změn automaticky commitnout a pushnout na origin
+alwaysApply: true
+---
+
+# Auto push
+
+Po dokončení požadovaných změn vždy:
+1. Vytvoř git commit (stručná zpráva v češtině / stylu repo)
+2. Pushni na `origin` (`git push`)
+
+Nedělej to jen když uživatel výslovně řekne, že push/commit nechce, nebo když není co commitnout.
