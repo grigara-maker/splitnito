@@ -1,14 +1,13 @@
--- Oprava RLS: spusť v Supabase SQL Editoru (jednou)
--- Problém: insert do companies + .select() padá, protože SELECT policy
--- vyžaduje profil (current_company_id), který ještě neexistuje.
+-- Spusť celé v Supabase → SQL Editor → Run
+-- Pak případně: Project Settings → API → Reload schema (nebo počkej pár sekund)
 
--- Uživatel vždy vidí svůj vlastní profil
 drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile"
   on public.profiles for select
   using (id = auth.uid());
 
--- Kompletní setup profilu (+ firma / invite) mimo RLS klienta
+drop function if exists public.complete_user_setup(text, text, text, text);
+
 create or replace function public.complete_user_setup(
   p_name text,
   p_iban text default null,
@@ -64,3 +63,6 @@ $$;
 
 revoke all on function public.complete_user_setup(text, text, text, text) from public;
 grant execute on function public.complete_user_setup(text, text, text, text) to authenticated;
+
+-- Obnoví PostgREST schema cache
+notify pgrst, 'reload schema';
