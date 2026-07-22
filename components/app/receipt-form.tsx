@@ -23,10 +23,12 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
   const [imageUrl, setImageUrl] = useState("");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setUploadError(null);
+    setOcrWarning(null);
     setOcrLoading(true);
     try {
       const supabase = createClient();
@@ -54,7 +56,12 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error ?? "OCR selhalo");
+        // Obrázek už je nahraný — OCR je jen pomocné předvyplnění
+        setOcrWarning(
+          json.error ??
+            "OCR se nepodařilo. Doklad můžete vyplnit ručně a uložit."
+        );
+        return;
       }
 
       if (json.vendor) setVendor(json.vendor);
@@ -112,6 +119,9 @@ export function ReceiptForm({ eventId }: { eventId: string }) {
         </div>
         {uploadError ? (
           <p className="text-sm text-destructive">{uploadError}</p>
+        ) : null}
+        {ocrWarning ? (
+          <p className="text-sm text-amber-700 dark:text-amber-500">{ocrWarning}</p>
         ) : null}
       </div>
 

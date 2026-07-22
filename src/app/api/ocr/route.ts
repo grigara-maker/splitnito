@@ -9,11 +9,14 @@ type OcrResult = {
 };
 
 /**
- * Gemini 1.5 Flash is shut down; use current Flash for the same role.
- * Override with GEMINI_OCR_MODEL if needed.
+ * Prefer env override, then try a few Flash models (quota / availability).
  */
-const GEMINI_MODEL =
-  process.env.GEMINI_OCR_MODEL?.trim() || "gemini-2.0-flash";
+const GEMINI_MODELS = [
+  process.env.GEMINI_OCR_MODEL?.trim(),
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash",
+].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -67,48 +70,79 @@ Rules:
 - If a field is unreadable, use null (or [] for items).
 - Do not invent values.`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: base64,
-              },
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: prompt },
+          {
+            inline_data: {
+              mime_type: mimeType,
+              data: base64,
             },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json",
+          },
+        ],
       },
-    }),
-  });
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: "application/json",
+    },
+  };
 
-  if (!response.ok) {
-    const text = await response.text();
+  let lastStatus = 0;
+  let lastText = "";
+  let data: {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
+  } | null = null;
+
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+
+    lastStatus = response.status;
+    lastText = await response.text();
+
+    if (response.ok) {
+      try {
+        data = JSON.parse(lastText) as typeof data;
+      } catch {
+        data = null;
+      }
+      if (data) break;
+    }
+
+    // 429 = quota — zkus další model; jiné chyby hned končí
+    if (response.status !== 429 && response.status !== 404) {
+      break;
+    }
+  }
+
+  if (!data) {
+    if (lastStatus === 429) {
+      return NextResponse.json(
+        {
+          error:
+            "OCR dočasně nedostupné — vyčerpala se kvóta Gemini API (429). Doklad můžete vyplnit ručně; quota se obvykle obnoví druhý den, nebo zapněte billing v Google AI Studio.",
+          code: "QUOTA_EXCEEDED",
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       {
-        error: `Gemini API chyba: ${response.status} ${text.slice(0, 300)}`,
+        error: `Gemini API chyba: ${lastStatus} ${lastText.slice(0, 200)}`,
       },
       { status: 502 }
     );
   }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
-  };
 
   const rawText = data.candidates?.[0]?.content?.parts
     ?.map((p) => p.text ?? "")
