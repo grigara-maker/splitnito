@@ -90,11 +90,16 @@ Extract structured data and respond ONLY with JSON matching this schema:
     }
   ]
 }
-Rules:
-- totalAmount must be the grand total (including tax if shown as final payment).
+CRITICAL — always use amounts INCLUDING VAT (DPH / tax):
+- On Czech invoices you often see both "Celkem" / "Celkem cena" (without VAT) AND "Celkem s DPH" / "Celkem k úhradě" / "Celková cena s DPH". ALWAYS pick the amount WITH DPH (the final amount to pay).
+- NEVER use the net / without-VAT total when a with-VAT total is present.
+- Prefer labels in this order: "Celkem k úhradě", "Celkem s DPH", "Celková cena s DPH", "K platbě", "Grand total", then other final payment totals.
+- Ignore "Celkem bez DPH", "Základ DPH", "Celkem cena" without DPH when a with-DPH figure exists.
+- Item unitPrice and totalPrice must also be WITH DPH when the receipt shows both. If only one price is shown, use that.
+- After extracting, mentally check: totalAmount should match the sum of item totalPrices within ~1 CZK when items are complete; if not, re-check you used the with-DPH totals.
+Other rules:
 - purchasedAt = date and time of purchase printed on the receipt (NOT upload time), ISO-8601 like "2024-03-15T14:32:00". If only a date is visible, use noon local time. If unreadable, null.
 - quantity = number of pieces/units (default 1 if unknown).
-- unitPrice = price per unit; totalPrice = quantity * unitPrice (or line total on receipt).
 - Use a dot as decimal separator.
 - If a field is unreadable, use null (or [] for items).
 - Do not invent values.`;
