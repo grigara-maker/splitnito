@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { reconcileOcrItemsWithTotal } from "@/lib/ocr-reconcile";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeReceiptItems } from "@/lib/types/database";
 
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = buffer.toString("base64");
 
-  const prompt = `You are reading a Czech or international receipt / invoice photo.
+  const prompt = `You are reading a Czech or international receipt / invoice / order summary (incl. TEMU, Amazon, eshop PDFs).
 Extract structured data and respond ONLY with JSON matching this schema:
 {
   "vendor": string | null,
@@ -90,32 +91,35 @@ Extract structured data and respond ONLY with JSON matching this schema:
     }
   ]
 }
-CRITICAL — always use amounts INCLUDING VAT (DPH / tax). This is mandatory:
-- Czech invoices often show TWO totals side by side, e.g. "Cena celkem" / "Celkem" NEXT TO "Cena s DPH" / "Celkem s DPH". Even if "Cena celkem" looks like the final amount, it is usually WITHOUT VAT. ALWAYS take "Cena s DPH" / "Celkem s DPH" / "Celková cena s DPH".
-- Never prefer "Cena celkem", "Celkem cena", "Celkem bez DPH", "Základ", or "Netto" when any with-DPH figure exists on the document.
-- Prefer labels in this exact priority: "Cena s DPH", "Celkem s DPH", "Celková cena s DPH", "Celkem k úhradě", "K platbě", "Grand total (incl. VAT)", then other WITH-VAT totals.
-- Only if the document has NO with-DPH amount at all, fall back to a single shown total.
-- Item unitPrice and totalPrice must also be WITH DPH when both net and gross are shown.
-- Sanity check: if you see both a smaller "Cena celkem" and a larger "Cena s DPH", totalAmount MUST be the larger with-DPH value.
-CRITICAL — quantity × price ambiguity (Czech receipts often write "2x" next to a price):
-- A line like "2x … 250" can mean EITHER:
-  A) unitPrice=250, quantity=2, totalPrice=500 (price per piece), OR
-  B) totalPrice=250 for quantity=2 together, so unitPrice=125 (line total shown).
-- You MUST decide which interpretation is correct by checking against totalAmount (with DPH):
-  1. First read totalAmount (grand total with DPH).
-  2. For each ambiguous line, consider both interpretations.
-  3. Prefer the set of item totalPrices whose SUM is closest to totalAmount (within ~1–2 CZK).
-  4. If interpretation A makes the items sum way above/below the invoice total, and B matches, use B — and vice versa.
-  5. Always fill: quantity, unitPrice (per 1 piece), totalPrice (= quantity * unitPrice, rounded to 2 decimals).
-- Example: items show "2x Káva 250" and "1x Bageta 80", invoice total 330 → 250 is line total (2×125), not 2×250.
-- Example: items show "2x Káva 250" and total 500 → 250 is unit price (2×250=500).
+
+CRITICAL — amounts INCLUDING VAT (DPH / tax):
+- Prefer "Cena s DPH", "Celkem s DPH", "Celkem k úhradě", "Order total", "Grand total", "Total paid".
+- Never prefer net / without VAT when a with-VAT total exists.
+- Item prices must be WITH VAT when both are shown.
+
+CRITICAL — unit price vs line total (MOST COMMON ERROR):
+A printed number next to quantity can mean EITHER:
+  A) PRICE PER PIECE (unitPrice): quantity=2, shown=250 → unitPrice=250, totalPrice=500
+  B) LINE TOTAL for all pieces: quantity=2, shown=250 → unitPrice=125, totalPrice=250
+
+YOU MUST DECIDE USING THE INVOICE GRAND TOTAL (totalAmount):
+1. Read totalAmount first (final amount customer pays).
+2. Build items so that sum(items.totalPrice) ≈ totalAmount (within ~1–2 currency units).
+3. If interpretation A makes the items sum far from totalAmount and B matches, use B — and vice versa.
+4. NEVER invent unitPrice by dividing a unit-price column by quantity.
+5. NEVER set totalPrice = unitPrice when quantity > 1 (unless the document truly shows only one price that is the line total — then unitPrice = that / quantity).
+
+Marketplace / TEMU / table invoices (Unit price | Qty | Amount):
+- If a column is labeled Unit price / Price / Cena / Cena/ks → that number is unitPrice; totalPrice = unitPrice × quantity.
+- If a column is labeled Amount / Item total / Součet / Celkem za položku → that number is totalPrice; unitPrice = totalPrice / quantity.
+- Typical TEMU mistake to AVOID: seeing unit price 250 and qty 2, then outputting unitPrice=125 and totalPrice=250. That is WRONG when 250 is the per-piece price.
+- After filling all product lines, VERIFY: sum(totalPrice) must match Order total / Grand total. If not, flip ambiguous lines between (A) and (B) until it fits.
+
 Other rules:
-- purchasedAt = date and time of purchase printed on the receipt (NOT upload time), ISO-8601 like "2024-03-15T14:32:00". If only a date is visible, use noon local time. If unreadable, null.
-- quantity = number of pieces/units (default 1 if unknown).
-- After extracting all items, re-check: sum(item.totalPrice) should match totalAmount within ~1 CZK when items look complete; if not, re-evaluate ambiguous quantity/price lines.
-- Use a dot as decimal separator.
-- If a field is unreadable, use null (or [] for items).
-- Do not invent values.`;
+- purchasedAt = purchase/order date-time on the document, ISO-8601. Date only → noon. Unreadable → null.
+- quantity default 1.
+- Decimal separator: dot.
+- Do not invent values. Unreadable → null / [].`;
 
   const requestBody = {
     contents: [
@@ -133,7 +137,7 @@ Other rules:
       },
     ],
     generationConfig: {
-      temperature: 0.1,
+      temperature: 0.05,
       responseMimeType: "application/json",
     },
   };
@@ -162,7 +166,6 @@ Other rules:
       if (data) break;
     }
 
-    // 429 = quota — zkus další model; jiné chyby hned končí
     if (response.status !== 429 && response.status !== 404) {
       break;
     }
@@ -219,16 +222,23 @@ Other rules:
       : null;
 
   let totalAmount: number | null = null;
-  if (typeof parsed.totalAmount === "number" && !Number.isNaN(parsed.totalAmount)) {
+  if (
+    typeof parsed.totalAmount === "number" &&
+    !Number.isNaN(parsed.totalAmount)
+  ) {
     totalAmount = parsed.totalAmount;
   } else if (typeof parsed.totalAmount === "string") {
-    const n = Number(String(parsed.totalAmount).replace(",", ".").replace(/\s/g, ""));
+    const n = Number(
+      String(parsed.totalAmount).replace(",", ".").replace(/\s/g, "")
+    );
     totalAmount = Number.isNaN(n) ? null : n;
   }
 
-  const items = Array.isArray(parsed.items)
+  const normalized = Array.isArray(parsed.items)
     ? normalizeReceiptItems(parsed.items)
     : [];
+  // Po AI: vyber interpretaci cena/ks vs. cena řádku podle celkové částky
+  const items = reconcileOcrItemsWithTotal(normalized, totalAmount);
 
   let purchasedAt: string | null = null;
   if (typeof parsed.purchasedAt === "string" && parsed.purchasedAt.trim()) {
