@@ -192,7 +192,13 @@ export default async function EventPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ReceiptForm eventId={event.id} />
+            <ReceiptForm eventId={event.id} existingReceipts={receipts.map((r) => ({
+              id: r.id,
+              vendor: r.vendor,
+              totalAmount: Number(r.total_amount),
+              purchasedAt: r.purchased_at,
+              createdAt: r.created_at,
+            }))} />
           </CardContent>
         </Card>
       ) : null}

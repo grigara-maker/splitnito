@@ -1,13 +1,17 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, Upload } from "lucide-react";
 
 import {
   createReceiptAction,
   updateReceiptAction,
   type ActionState,
 } from "@/lib/actions/events";
+import {
+  findMatchingReceipt,
+  type ReceiptDuplicateKey,
+} from "@/lib/receipt-duplicates";
 import { createClient } from "@/lib/supabase/client";
 import { itemsSum } from "@/lib/settlement";
 import type { ReceiptItem } from "@/lib/types/database";
@@ -82,10 +86,13 @@ function toDatetimeLocalValue(d: Date): string {
 export function ReceiptForm({
   eventId,
   initialReceipt,
+  existingReceipts = [],
   onSaved,
 }: {
   eventId: string;
   initialReceipt?: ReceiptFormInitial;
+  /** Doklady akce pro detekci duplicit (dodavatel + částka + datum). */
+  existingReceipts?: ReceiptDuplicateKey[];
   onSaved?: () => void;
 }) {
   const isEdit = Boolean(initialReceipt);
@@ -116,6 +123,20 @@ export function ReceiptForm({
 
   const computedItems = useMemo(() => draftsToItems(items), [items]);
   const itemsTotal = useMemo(() => itemsSum(computedItems), [computedItems]);
+
+  const duplicateMatch = useMemo(() => {
+    const amount = Number(String(totalAmount).replace(",", "."));
+    if (!vendor.trim() || !Number.isFinite(amount)) return null;
+    return findMatchingReceipt(
+      {
+        vendor,
+        totalAmount: amount,
+        purchasedAt: purchasedAt || null,
+      },
+      existingReceipts,
+      initialReceipt?.id
+    );
+  }, [vendor, totalAmount, purchasedAt, existingReceipts, initialReceipt?.id]);
 
   useEffect(() => {
     if (!totalManual && computedItems.length > 0) {
@@ -279,6 +300,21 @@ export function ReceiptForm({
         ) : null}
         {ocrWarning ? (
           <p className="text-sm text-amber-700 dark:text-amber-500">{ocrWarning}</p>
+        ) : null}
+        {duplicateMatch ? (
+          <p
+            className="flex items-start gap-2 text-sm font-medium text-amber-700 dark:text-amber-500"
+            role="status"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              Duplikát — stejný dodavatel, částka i datum už v této akci je
+              {duplicateMatch.vendor
+                ? ` („${duplicateMatch.vendor}“)`
+                : ""}
+              . Uložte jen pokud jde opravdu o jiný doklad.
+            </span>
+          </p>
         ) : null}
       </div>
 

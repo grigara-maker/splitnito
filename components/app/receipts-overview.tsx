@@ -12,6 +12,7 @@ import {
   amountsMismatch,
   itemsSum,
 } from "@/lib/settlement";
+import { findDuplicateReceiptIds } from "@/lib/receipt-duplicates";
 import { normalizeReceiptItems, type ReceiptItem } from "@/lib/types/database";
 import { ReceiptForm } from "@/components/app/receipt-form";
 import { Badge } from "@/components/ui/badge";
@@ -133,6 +134,20 @@ export function ReceiptsOverview({
     return Array.from(map.values()).sort((a, b) => b.sum - a.sum);
   }, [filtered]);
 
+  const duplicateIds = useMemo(
+    () =>
+      findDuplicateReceiptIds(
+        receipts.map((r) => ({
+          id: r.id,
+          vendor: r.vendor,
+          totalAmount: Number(r.total_amount),
+          purchasedAt: r.purchased_at,
+          createdAt: r.created_at,
+        }))
+      ),
+    [receipts]
+  );
+
   const selectedItems: ReceiptItem[] = selected
     ? normalizeReceiptItems(selected.items)
     : [];
@@ -200,6 +215,7 @@ export function ReceiptsOverview({
                 const mismatch =
                   lineItems.length > 0 &&
                   amountsMismatch(itemsSum(lineItems), Number(r.total_amount));
+                const isDuplicate = duplicateIds.has(r.id);
                 return (
                   <li key={r.id}>
                     <button
@@ -211,14 +227,32 @@ export function ReceiptsOverview({
                       className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
                     >
                       <div className="flex items-start gap-2">
-                        {mismatch ? (
+                        {mismatch || isDuplicate ? (
                           <AlertTriangle
-                            className="mt-0.5 size-4 shrink-0 text-destructive"
-                            aria-label="Nesedí součet položek"
+                            className={
+                              isDuplicate
+                                ? "mt-0.5 size-4 shrink-0 text-amber-600"
+                                : "mt-0.5 size-4 shrink-0 text-destructive"
+                            }
+                            aria-label={
+                              isDuplicate
+                                ? "Možný duplikát"
+                                : "Nesedí součet položek"
+                            }
                           />
                         ) : null}
                         <div>
-                          <p className="font-medium">{r.vendor}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{r.vendor}</p>
+                            {isDuplicate ? (
+                              <Badge
+                                variant="outline"
+                                className="border-amber-600/40 text-amber-700"
+                              >
+                                duplikát
+                              </Badge>
+                            ) : null}
+                          </div>
                           <p className="text-muted-foreground">
                             {when.date} · {when.time}
                           </p>
@@ -264,6 +298,13 @@ export function ReceiptsOverview({
                 </DialogHeader>
                 <ReceiptForm
                   eventId={eventId}
+                  existingReceipts={receipts.map((r) => ({
+                    id: r.id,
+                    vendor: r.vendor,
+                    totalAmount: Number(r.total_amount),
+                    purchasedAt: r.purchased_at,
+                    createdAt: r.created_at,
+                  }))}
                   initialReceipt={{
                     id: selected.id,
                     vendor: selected.vendor,
@@ -289,7 +330,18 @@ export function ReceiptsOverview({
             ) : (
               <>
                 <DialogHeader>
-                  <DialogTitle>{selected.vendor}</DialogTitle>
+                  <DialogTitle className="flex flex-wrap items-center gap-2">
+                    {selected.vendor}
+                    {duplicateIds.has(selected.id) ? (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-600/40 text-amber-700"
+                      >
+                        <AlertTriangle className="size-3.5" />
+                        duplikát
+                      </Badge>
+                    ) : null}
+                  </DialogTitle>
                   <DialogDescription>
                     Detail dokladu · {profileName(selected.profiles)}
                   </DialogDescription>
