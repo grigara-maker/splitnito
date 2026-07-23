@@ -119,20 +119,12 @@ export function ReceiptForm({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
-  const [localExtras, setLocalExtras] = useState<ReceiptDuplicateKey[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const wasPending = useRef(false);
-  const draftRef = useRef({ vendor, totalAmount, purchasedAt });
-  draftRef.current = { vendor, totalAmount, purchasedAt };
 
   const computedItems = useMemo(() => draftsToItems(items), [items]);
   const itemsTotal = useMemo(() => itemsSum(computedItems), [computedItems]);
-
-  const allExisting = useMemo(
-    () => [...existingReceipts, ...localExtras],
-    [existingReceipts, localExtras]
-  );
 
   const duplicateMatch = useMemo(() => {
     const amount = Number(String(totalAmount).replace(",", "."));
@@ -143,10 +135,10 @@ export function ReceiptForm({
         totalAmount: amount,
         purchasedAt: purchasedAt || null,
       },
-      allExisting,
+      existingReceipts,
       initialReceipt?.id
     );
-  }, [vendor, totalAmount, purchasedAt, allExisting, initialReceipt?.id]);
+  }, [vendor, totalAmount, purchasedAt, existingReceipts, initialReceipt?.id]);
 
   useEffect(() => {
     if (!totalManual && computedItems.length > 0) {
@@ -174,20 +166,6 @@ export function ReceiptForm({
     if (!finished || !state.success) return;
 
     if (!isEdit) {
-      const draft = draftRef.current;
-      const amount = Number(String(draft.totalAmount).replace(",", "."));
-      if (draft.vendor.trim() && Number.isFinite(amount)) {
-        setLocalExtras((prev) => [
-          ...prev,
-          {
-            id: `local-${crypto.randomUUID()}`,
-            vendor: draft.vendor,
-            totalAmount: amount,
-            purchasedAt: draft.purchasedAt || null,
-            eventName: "tato akce",
-          },
-        ]);
-      }
       resetCreateForm();
       router.refresh();
     }

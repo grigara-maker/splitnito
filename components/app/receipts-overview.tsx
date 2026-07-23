@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { AlertTriangle, ArrowLeft, ChevronDown, Pencil, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronDown,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import {
   deleteReceiptAction,
@@ -92,6 +99,7 @@ export function ReceiptsOverview({
   /** Formulář „Přidat doklad“ — hned pod celkovou částkou. */
   showAddForm?: boolean;
 }) {
+  const router = useRouter();
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
   const [editing, setEditing] = useState(false);
@@ -101,20 +109,30 @@ export function ReceiptsOverview({
   const [imageLoading, setImageLoading] = useState(false);
   const [companyReceipts, setCompanyReceipts] = useState(initialCompanyReceipts);
 
+  const receiptSeedKey = useMemo(
+    () =>
+      initialCompanyReceipts
+        .map((r) => r.id)
+        .filter(Boolean)
+        .sort()
+        .join(","),
+    [initialCompanyReceipts]
+  );
+
+  // Po refreshi (např. smazání) znovu načíst aktuální doklady firmy — smazané už nepočítat
   useEffect(() => {
     setCompanyReceipts(initialCompanyReceipts);
-  }, [initialCompanyReceipts]);
-
-  useEffect(() => {
     if (!loadCompanyDuplicates) return;
     let cancelled = false;
     void getCompanyReceiptDuplicatesAction().then((rows) => {
-      if (!cancelled && rows.length > 0) setCompanyReceipts(rows);
+      if (!cancelled) setCompanyReceipts(rows);
     });
     return () => {
       cancelled = true;
     };
-  }, [loadCompanyDuplicates]);
+    // receiptSeedKey = množina ID dokladů na stránce (mění se po smazání/přidání)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialCompanyReceipts sync přes seed
+  }, [loadCompanyDuplicates, receiptSeedKey]);
 
   const addForm = showAddForm ? (
     <Card>
@@ -614,12 +632,20 @@ export function ReceiptsOverview({
                           if (!selected) return;
                           if (!confirm("Opravdu smazat tento doklad?")) return;
                           startTransition(async () => {
+                            const deletedId = selected.id;
                             const result = await deleteReceiptAction(
-                              selected.id,
+                              deletedId,
                               eventId
                             );
-                            if (result.error) setActionError(result.error);
-                            else setSelected(null);
+                            if (result.error) {
+                              setActionError(result.error);
+                              return;
+                            }
+                            setCompanyReceipts((prev) =>
+                              prev.filter((r) => r.id !== deletedId)
+                            );
+                            setSelected(null);
+                            router.refresh();
                           });
                         }}
                       >
