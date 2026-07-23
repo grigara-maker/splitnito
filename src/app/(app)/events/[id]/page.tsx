@@ -205,26 +205,26 @@ export default async function EventPage({
           currentUserId={userId}
           isCompanyAdmin={isCompanyAdmin}
           eventActive={event.status === "active"}
-        />
+        >
+          {event.status === "active" && !isCompanyAdmin ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Přidat doklad</CardTitle>
+                <CardDescription>
+                  Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní
+                  dodavatele a částku.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ReceiptForm
+                  eventId={event.id}
+                  existingReceipts={companyReceiptKeys}
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+        </ReceiptsOverview>
       </section>
-
-      {event.status === "active" && !isCompanyAdmin ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Přidat doklad</CardTitle>
-            <CardDescription>
-              Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní dodavatele a
-              částku.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ReceiptForm
-              eventId={event.id}
-              existingReceipts={companyReceiptKeys}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
 
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">

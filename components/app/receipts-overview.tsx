@@ -65,6 +65,7 @@ export function ReceiptsOverview({
   currentUserId,
   isCompanyAdmin,
   eventActive,
+  children,
 }: {
   receipts: ReceiptRow[];
   /** Doklady celé firmy (všechny akce) pro detekci duplicit. */
@@ -73,6 +74,8 @@ export function ReceiptsOverview({
   currentUserId: string;
   isCompanyAdmin: boolean;
   eventActive: boolean;
+  /** Formulář „Přidat doklad“ — hned pod celkovou částkou. */
+  children?: React.ReactNode;
 }) {
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
@@ -167,9 +170,18 @@ export function ReceiptsOverview({
 
   if (receipts.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Zatím žádné doklady. Přidejte první níže.
-      </p>
+      <div className="flex flex-col gap-6">
+        <div>
+          <p className="text-sm text-muted-foreground">Zobrazená útrata</p>
+          <p className="text-3xl font-semibold tracking-tight">
+            {formatCzk(0)}
+          </p>
+        </div>
+        {children}
+        <p className="text-sm text-muted-foreground">
+          Zatím žádné doklady. Přidejte první výše.
+        </p>
+      </div>
     );
   }
 
@@ -201,6 +213,8 @@ export function ReceiptsOverview({
           </select>
         </div>
       </div>
+
+      {children}
 
       <div className="flex flex-col gap-4">
         {byUser.map((group) => (
