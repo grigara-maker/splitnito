@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { CompanyNameForm } from "@/components/app/company-name-form";
+import { CopyIconButton } from "@/components/app/copy-icon-button";
 import { DeleteAccountForm } from "@/components/app/delete-account-form";
 import { RemoveMemberButton } from "@/components/app/remove-member-button";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +74,12 @@ export default async function CompanyPage() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Odkaz pro pozvání</p>
-            <p className="mt-1 break-all text-sm font-medium">{inviteUrl}</p>
+            <div className="mt-1 flex items-start gap-1.5">
+              <p className="min-w-0 flex-1 break-all text-sm font-medium">
+                {inviteUrl}
+              </p>
+              <CopyIconButton value={inviteUrl} label="Kopírovat odkaz" />
+            </div>
           </div>
         </CardContent>
       </Card>
