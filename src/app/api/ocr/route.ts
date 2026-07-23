@@ -97,9 +97,22 @@ CRITICAL — always use amounts INCLUDING VAT (DPH / tax). This is mandatory:
 - Only if the document has NO with-DPH amount at all, fall back to a single shown total.
 - Item unitPrice and totalPrice must also be WITH DPH when both net and gross are shown.
 - Sanity check: if you see both a smaller "Cena celkem" and a larger "Cena s DPH", totalAmount MUST be the larger with-DPH value.
+CRITICAL — quantity × price ambiguity (Czech receipts often write "2x" next to a price):
+- A line like "2x … 250" can mean EITHER:
+  A) unitPrice=250, quantity=2, totalPrice=500 (price per piece), OR
+  B) totalPrice=250 for quantity=2 together, so unitPrice=125 (line total shown).
+- You MUST decide which interpretation is correct by checking against totalAmount (with DPH):
+  1. First read totalAmount (grand total with DPH).
+  2. For each ambiguous line, consider both interpretations.
+  3. Prefer the set of item totalPrices whose SUM is closest to totalAmount (within ~1–2 CZK).
+  4. If interpretation A makes the items sum way above/below the invoice total, and B matches, use B — and vice versa.
+  5. Always fill: quantity, unitPrice (per 1 piece), totalPrice (= quantity * unitPrice, rounded to 2 decimals).
+- Example: items show "2x Káva 250" and "1x Bageta 80", invoice total 330 → 250 is line total (2×125), not 2×250.
+- Example: items show "2x Káva 250" and total 500 → 250 is unit price (2×250=500).
 Other rules:
 - purchasedAt = date and time of purchase printed on the receipt (NOT upload time), ISO-8601 like "2024-03-15T14:32:00". If only a date is visible, use noon local time. If unreadable, null.
 - quantity = number of pieces/units (default 1 if unknown).
+- After extracting all items, re-check: sum(item.totalPrice) should match totalAmount within ~1 CZK when items look complete; if not, re-evaluate ambiguous quantity/price lines.
 - Use a dot as decimal separator.
 - If a field is unreadable, use null (or [] for items).
 - Do not invent values.`;
