@@ -20,9 +20,10 @@ function AppleLogo({ className }: { className?: string }) {
   );
 }
 
+/** Jen pro login — existující Apple účet. Nový účet skončí na /onboarding. */
 export function AppleAuthButton({
   next = "/dashboard",
-  label = "Pokračovat s Apple",
+  label = "Přihlásit se přes Apple",
 }: {
   next?: string;
   label?: string;

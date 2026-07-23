@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { OnboardingForm } from "@/components/app/onboarding-form";
@@ -77,25 +78,27 @@ export default async function OnboardingPage({
         <div className="text-center">
           <p className="font-heading text-lg font-semibold">Splitnito</p>
           <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
-            Dokončení účtu
+            Dokončení Apple účtu
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Zvolte, jestli zakládáte firmu, nebo se připojujete jako uživatel.
+            Poslední krok — firma nebo kód pozvánky a IBAN.
           </p>
         </div>
         <Card className="bg-card/90 shadow-lg backdrop-blur-md">
           <CardHeader>
             <CardTitle>Profil ve Splitnito</CardTitle>
             <CardDescription>
-              Firma získá invite kód. Uživatel zadá kód firmy.
+              Bez tohoto kroku se do aplikace nedostanete.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <OnboardingForm
-              defaultName={nameFromUser(user)}
-              defaultEmail={user.email ?? ""}
-              defaultInvite={invite}
-            />
+            <Suspense fallback={null}>
+              <OnboardingForm
+                defaultName={nameFromUser(user)}
+                defaultEmail={user.email ?? ""}
+                defaultInvite={invite}
+              />
+            </Suspense>
           </CardContent>
         </Card>
       </div>

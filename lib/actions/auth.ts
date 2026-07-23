@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isValidIban, normalizeIban } from "@/lib/iban";
+import {
+  clearPendingAppleSetup,
+  setPendingAppleSetup,
+} from "@/lib/auth/apple-pending";
 import { getSiteUrl } from "@/lib/site";
 import {
   createServiceClient,
@@ -16,6 +20,13 @@ export type AuthState = {
   error?: string;
   success?: string;
 };
+
+function appleOAuthErrorMessage(message: string): string {
+  if (/missing OAuth secret|Unsupported provider/i.test(message)) {
+    return "Apple přihlášení není v Supabase dokončené: chybí OAuth secret (Client Secret JWT z Apple .p8 klíče). Doplňte ho v Authentication → Providers → Apple.";
+  }
+  return message;
+}
 
 export async function loginAction(
   _prev: AuthState,
@@ -38,17 +49,7 @@ export async function loginAction(
   redirect("/dashboard");
 }
 
-/** OAuth přes Apple — po návratu dokončí profil na /onboarding, pokud chybí. */
-export async function signInWithAppleAction(
-  _prev: AuthState,
-  formData: FormData
-): Promise<AuthState> {
-  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
-  const next =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//")
-      ? nextRaw
-      : "/dashboard";
-
+async function startAppleOAuth(next: string): Promise<AuthState> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "apple",
@@ -59,13 +60,70 @@ export async function signInWithAppleAction(
   });
 
   if (error) {
-    return { error: error.message };
+    return { error: appleOAuthErrorMessage(error.message) };
   }
   if (!data.url) {
     return { error: "Nepodařilo se spustit přihlášení přes Apple." };
   }
 
   redirect(data.url);
+}
+
+/** Přihlášení existujícího Apple účtu (nový účet → /onboarding). */
+export async function signInWithAppleAction(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
+  const next =
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//")
+      ? nextRaw
+      : "/dashboard";
+
+  await clearPendingAppleSetup();
+  return startAppleOAuth(next);
+}
+
+/**
+ * Registrace přes Apple: nejdřív stejná data jako e-mail (firma / kód / IBAN),
+ * uloží se do cookie a po návratu z Apple se profil dokončí automaticky.
+ */
+export async function registerWithAppleAction(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const accountType = String(formData.get("accountType") ?? "member");
+  const companyName = String(formData.get("companyName") ?? "").trim();
+  const inviteCode = String(formData.get("inviteCode") ?? "").trim();
+  const memberName = String(formData.get("name") ?? "").trim();
+  const ibanRaw = String(formData.get("iban") ?? "").trim();
+
+  if (accountType === "company") {
+    if (!companyName) return { error: "Zadejte název firmy." };
+  } else {
+    if (!memberName) return { error: "Zadejte své jméno." };
+    if (!inviteCode) {
+      return { error: "Zadejte kód firmy, ke které se připojujete." };
+    }
+  }
+
+  let iban: string | null = null;
+  if (accountType === "member" && ibanRaw) {
+    if (!isValidIban(ibanRaw)) {
+      return { error: "IBAN není platný. Zkontrolujte formát." };
+    }
+    iban = normalizeIban(ibanRaw);
+  }
+
+  await setPendingAppleSetup({
+    accountType: accountType === "company" ? "company" : "member",
+    companyName: accountType === "company" ? companyName : null,
+    inviteCode: accountType === "member" ? inviteCode : null,
+    name: accountType === "member" ? memberName : companyName,
+    iban,
+  });
+
+  return startAppleOAuth("/dashboard");
 }
 
 export async function registerAction(
