@@ -90,6 +90,7 @@ export function ReceiptsOverview({
     }
 
     let cancelled = false;
+    setImageUrl(null);
     setImageLoading(true);
     void getReceiptImageUrlAction(selected.id).then((result) => {
       if (cancelled) return;
