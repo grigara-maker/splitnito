@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 
 import { CloseEventButton } from "@/components/app/close-event-button";
-import { ReceiptForm } from "@/components/app/receipt-form";
 import { ReceiptsOverview } from "@/components/app/receipts-overview";
 import { RevenueForm } from "@/components/app/revenue-form";
 import { RevenuesOverview } from "@/components/app/revenues-overview";
@@ -170,27 +169,8 @@ export default async function EventPage({
           isCompanyAdmin={isCompanyAdmin}
           eventActive={event.status === "active"}
           loadCompanyDuplicates
-        >
-          {event.status === "active" && !isCompanyAdmin ? (
-            (companyKeys) => (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Přidat doklad</CardTitle>
-                  <CardDescription>
-                    Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní
-                    dodavatele a částku.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ReceiptForm
-                    eventId={event.id}
-                    existingReceipts={companyKeys}
-                  />
-                </CardContent>
-              </Card>
-            )
-          ) : null}
-        </ReceiptsOverview>
+          showAddForm={event.status === "active" && !isCompanyAdmin}
+        />
       </section>
 
       <section className="flex flex-col gap-4">

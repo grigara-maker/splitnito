@@ -22,6 +22,13 @@ import { ReceiptForm } from "@/components/app/receipt-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -71,7 +78,7 @@ export function ReceiptsOverview({
   isCompanyAdmin,
   eventActive,
   loadCompanyDuplicates = false,
-  children,
+  showAddForm = false,
 }: {
   receipts: ReceiptRow[];
   /** Doklady pro detekci duplicit (nejprve akce, pak firma). */
@@ -83,9 +90,7 @@ export function ReceiptsOverview({
   /** Po mountu donačíst duplicity napříč firmou (neblokuje SSR). */
   loadCompanyDuplicates?: boolean;
   /** Formulář „Přidat doklad“ — hned pod celkovou částkou. */
-  children?:
-    | React.ReactNode
-    | ((companyReceipts: ReceiptDuplicateKey[]) => React.ReactNode);
+  showAddForm?: boolean;
 }) {
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
@@ -111,8 +116,20 @@ export function ReceiptsOverview({
     };
   }, [loadCompanyDuplicates]);
 
-  const addForm =
-    typeof children === "function" ? children(companyReceipts) : children;
+  const addForm = showAddForm ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>Přidat doklad</CardTitle>
+        <CardDescription>
+          Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní dodavatele a
+          částku.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ReceiptForm eventId={eventId} existingReceipts={companyReceipts} />
+      </CardContent>
+    </Card>
+  ) : null;
 
   useEffect(() => {
     if (!selected) {
