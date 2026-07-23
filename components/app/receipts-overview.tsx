@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
 import {
   deleteReceiptAction,
+  getCompanyReceiptDuplicatesAction,
   getReceiptImageUrlAction,
 } from "@/lib/actions/events";
 import { formatCzk } from "@/lib/iban";
@@ -12,7 +13,10 @@ import {
   amountsMismatch,
   itemsSum,
 } from "@/lib/settlement";
-import { findDuplicateReceiptIds, type ReceiptDuplicateKey } from "@/lib/receipt-duplicates";
+import {
+  findDuplicateReceiptIds,
+  type ReceiptDuplicateKey,
+} from "@/lib/receipt-duplicates";
 import { normalizeReceiptItems, type ReceiptItem } from "@/lib/types/database";
 import { ReceiptForm } from "@/components/app/receipt-form";
 import { Badge } from "@/components/ui/badge";
@@ -60,22 +64,27 @@ function formatDateTime(iso: string) {
 
 export function ReceiptsOverview({
   receipts,
-  companyReceipts,
+  companyReceipts: initialCompanyReceipts,
   eventId,
   currentUserId,
   isCompanyAdmin,
   eventActive,
+  loadCompanyDuplicates = false,
   children,
 }: {
   receipts: ReceiptRow[];
-  /** Doklady celé firmy (všechny akce) pro detekci duplicit. */
+  /** Doklady pro detekci duplicit (nejprve akce, pak firma). */
   companyReceipts: ReceiptDuplicateKey[];
   eventId: string;
   currentUserId: string;
   isCompanyAdmin: boolean;
   eventActive: boolean;
+  /** Po mountu donačíst duplicity napříč firmou (neblokuje SSR). */
+  loadCompanyDuplicates?: boolean;
   /** Formulář „Přidat doklad“ — hned pod celkovou částkou. */
-  children?: React.ReactNode;
+  children?:
+    | React.ReactNode
+    | ((companyReceipts: ReceiptDuplicateKey[]) => React.ReactNode);
 }) {
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
@@ -84,6 +93,25 @@ export function ReceiptsOverview({
   const [actionError, setActionError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+  const [companyReceipts, setCompanyReceipts] = useState(initialCompanyReceipts);
+
+  useEffect(() => {
+    setCompanyReceipts(initialCompanyReceipts);
+  }, [initialCompanyReceipts]);
+
+  useEffect(() => {
+    if (!loadCompanyDuplicates) return;
+    let cancelled = false;
+    void getCompanyReceiptDuplicatesAction().then((rows) => {
+      if (!cancelled && rows.length > 0) setCompanyReceipts(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadCompanyDuplicates]);
+
+  const addForm =
+    typeof children === "function" ? children(companyReceipts) : children;
 
   useEffect(() => {
     if (!selected) {
@@ -177,7 +205,7 @@ export function ReceiptsOverview({
             {formatCzk(0)}
           </p>
         </div>
-        {children}
+        {addForm}
         <p className="text-sm text-muted-foreground">
           Zatím žádné doklady. Přidejte první výše.
         </p>
@@ -214,7 +242,7 @@ export function ReceiptsOverview({
         </div>
       </div>
 
-      {children}
+      {addForm}
 
       <div className="flex flex-col gap-4">
         {byUser.map((group) => (

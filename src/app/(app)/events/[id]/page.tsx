@@ -38,13 +38,11 @@ export default async function EventPage({
 
   if (!event || event.company_id !== profile.company_id) notFound();
 
-  const [companyResult, receiptsResult, revenuesResult, settlementResult, companyReceiptsResult] =
+  const isClosed = event.status === "closed";
+
+  // Jen data potřebná pro první paint — duplicity napříč firmou se donačtou na klientu
+  const [receiptsResult, revenuesResult, settlementResult, companyResult] =
     await Promise.all([
-      supabase
-        .from("companies")
-        .select("name")
-        .eq("id", event.company_id)
-        .maybeSingle(),
       supabase
         .from("receipts")
         .select(
@@ -57,74 +55,29 @@ export default async function EventPage({
         .select("id, name, amount, created_at, user_id, uploader_name")
         .eq("event_id", id)
         .order("created_at", { ascending: false }),
-      event.status === "closed"
+      isClosed
         ? supabase
             .from("settlements")
             .select("summary_data")
             .eq("event_id", id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
-      // Všechny doklady firmy (všechny akce) — pro detekci duplicit
-      supabase
-        .from("receipts")
-        .select(
-          "id, vendor, total_amount, purchased_at, created_at, event_id, events!inner(name, company_id)"
-        )
-        .eq("events.company_id", event.company_id),
+      isClosed
+        ? supabase
+            .from("companies")
+            .select("name")
+            .eq("id", event.company_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
   const company = companyResult.data;
   const receiptsRaw = receiptsResult.data;
   const revenuesRaw = revenuesResult.data;
 
-  const companyReceiptKeys = (companyReceiptsResult.data ?? []).map((r) => {
-    const ev = r.events as unknown as
-      | { name: string; company_id: string }
-      | { name: string; company_id: string }[]
-      | null;
-    const eventName = Array.isArray(ev) ? ev[0]?.name : ev?.name;
-    return {
-      id: r.id,
-      vendor: r.vendor,
-      totalAmount: Number(r.total_amount),
-      purchasedAt: r.purchased_at,
-      createdAt: r.created_at,
-      eventId: r.event_id,
-      eventName: eventName ?? "jiná akce",
-    };
-  });
+  const resolveName = (uploaderName: string | null | undefined) =>
+    uploaderName?.trim() || "Bývalý uživatel";
 
-
-  const userIds = Array.from(
-    new Set(
-      [
-        ...(receiptsRaw ?? []).map((r) => r.user_id),
-        ...(revenuesRaw ?? []).map((r) => r.user_id),
-      ].filter((uid): uid is string => Boolean(uid))
-    )
-  );
-  const nameByUser = new Map<string, string>();
-
-  if (userIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, name")
-      .in("id", userIds);
-
-    for (const p of profiles ?? []) {
-      nameByUser.set(p.id, p.name);
-    }
-  }
-
-  const resolveName = (
-    uid: string | null,
-    uploaderName: string | null | undefined
-  ) =>
-    (uid ? nameByUser.get(uid) : null) ??
-    uploaderName ??
-    "Bývalý uživatel";
-
-  // image_url se stahuje až při otevření detailu (getReceiptImageUrlAction)
   const receipts = (receiptsRaw ?? []).map((r) => ({
     id: r.id,
     vendor: r.vendor,
@@ -135,7 +88,7 @@ export default async function EventPage({
     uploader_name: r.uploader_name,
     items: r.items,
     image_url: null as string | null,
-    profiles: { name: resolveName(r.user_id, r.uploader_name) },
+    profiles: { name: resolveName(r.uploader_name) },
   }));
 
   const revenues = (revenuesRaw ?? []).map((r) => ({
@@ -145,7 +98,18 @@ export default async function EventPage({
     created_at: r.created_at,
     user_id: r.user_id,
     uploader_name: r.uploader_name,
-    profiles: { name: resolveName(r.user_id, r.uploader_name) },
+    profiles: { name: resolveName(r.uploader_name) },
+  }));
+
+  // Okamžité duplicity v rámci této akce; firma se doplní na klientu
+  const eventReceiptKeys = receipts.map((r) => ({
+    id: r.id,
+    vendor: r.vendor,
+    totalAmount: Number(r.total_amount),
+    purchasedAt: r.purchased_at,
+    createdAt: r.created_at,
+    eventId: event.id,
+    eventName: event.name,
   }));
 
   const isCompanyAdmin = profile.role === "company";
@@ -200,28 +164,31 @@ export default async function EventPage({
         </h2>
         <ReceiptsOverview
           receipts={receipts}
-          companyReceipts={companyReceiptKeys}
+          companyReceipts={eventReceiptKeys}
           eventId={event.id}
           currentUserId={userId}
           isCompanyAdmin={isCompanyAdmin}
           eventActive={event.status === "active"}
+          loadCompanyDuplicates
         >
           {event.status === "active" && !isCompanyAdmin ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Přidat doklad</CardTitle>
-                <CardDescription>
-                  Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní
-                  dodavatele a částku.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ReceiptForm
-                  eventId={event.id}
-                  existingReceipts={companyReceiptKeys}
-                />
-              </CardContent>
-            </Card>
+            (companyKeys) => (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Přidat doklad</CardTitle>
+                  <CardDescription>
+                    Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní
+                    dodavatele a částku.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ReceiptForm
+                    eventId={event.id}
+                    existingReceipts={companyKeys}
+                  />
+                </CardContent>
+              </Card>
+            )
           ) : null}
         </ReceiptsOverview>
       </section>

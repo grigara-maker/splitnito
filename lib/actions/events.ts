@@ -251,6 +251,46 @@ export async function getReceiptImageUrlAction(
   return { url: receipt.image_url ?? null };
 }
 
+/** Slim fingerprinty dokladů celé firmy — načítá se až po prvním paintu stránky. */
+export async function getCompanyReceiptDuplicatesAction(): Promise<
+  {
+    id: string;
+    vendor: string;
+    totalAmount: number;
+    purchasedAt: string | null;
+    createdAt: string;
+    eventId: string;
+    eventName: string;
+  }[]
+> {
+  const { supabase, profile } = await requireProfile();
+
+  const { data: events } = await supabase
+    .from("events")
+    .select("id, name")
+    .eq("company_id", profile.company_id);
+
+  const eventIds = (events ?? []).map((e) => e.id);
+  if (eventIds.length === 0) return [];
+
+  const nameByEvent = new Map((events ?? []).map((e) => [e.id, e.name]));
+
+  const { data: rows } = await supabase
+    .from("receipts")
+    .select("id, vendor, total_amount, purchased_at, created_at, event_id")
+    .in("event_id", eventIds);
+
+  return (rows ?? []).map((r) => ({
+    id: r.id,
+    vendor: r.vendor,
+    totalAmount: Number(r.total_amount),
+    purchasedAt: r.purchased_at,
+    createdAt: r.created_at,
+    eventId: r.event_id,
+    eventName: nameByEvent.get(r.event_id) ?? "jiná akce",
+  }));
+}
+
 function parseRevenueFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const amountRaw = String(formData.get("amount") ?? "").replace(",", ".");
