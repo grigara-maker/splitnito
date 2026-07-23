@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 import { deleteRevenueAction } from "@/lib/actions/events";
 import { formatCzk } from "@/lib/iban";
@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 export type RevenueRow = {
   id: string;
@@ -47,6 +48,9 @@ export function RevenuesOverview({
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const total = useMemo(
     () => revenues.reduce((s, r) => s + Number(r.amount), 0),
@@ -56,12 +60,13 @@ export function RevenuesOverview({
   const byUser = useMemo(() => {
     const map = new Map<
       string,
-      { name: string; items: RevenueRow[]; sum: number }
+      { key: string; name: string; items: RevenueRow[]; sum: number }
     >();
     for (const r of revenues) {
       const key =
         r.user_id ?? `anon:${r.uploader_name ?? profileName(r.profiles)}`;
       const entry = map.get(key) ?? {
+        key,
         name: profileName(r.profiles),
         items: [],
         sum: 0,
@@ -72,6 +77,15 @@ export function RevenuesOverview({
     }
     return Array.from(map.values()).sort((a, b) => b.sum - a.sum);
   }, [revenues]);
+
+  function toggleUser(key: string) {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const canManageSelected =
     selected &&
@@ -100,35 +114,71 @@ export function RevenuesOverview({
       </div>
 
       <div className="flex flex-col gap-4">
-        {byUser.map((group) => (
-          <div
-            key={group.name}
-            className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
-          >
-            <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-              <p className="font-medium">{group.name}</p>
-              <p className="text-sm font-medium">{formatCzk(group.sum)}</p>
-            </div>
-            <ul>
-              {group.items.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
-                    onClick={() => {
-                      setSelected(r);
-                      setEditing(false);
-                      setActionError(null);
-                    }}
+        {byUser.map((group) => {
+          const open = expandedUsers.has(group.key);
+          return (
+            <div
+              key={group.key}
+              className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
+            >
+              <button
+                type="button"
+                onClick={() => toggleUser(group.key)}
+                aria-expanded={open}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-muted/40"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <ChevronDown
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground transition-transform duration-300",
+                      open ? "rotate-0" : "-rotate-90"
+                    )}
+                    aria-hidden
+                  />
+                  <span className="truncate font-medium">{group.name}</span>
+                </span>
+                <span className="text-sm font-medium">
+                  {formatCzk(group.sum)}
+                </span>
+              </button>
+
+              <div
+                className={cn(
+                  "grid transition-[grid-template-rows] duration-300 ease-out",
+                  open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                )}
+              >
+                <div className="overflow-hidden">
+                  <ul
+                    className={cn(
+                      "divide-y divide-border/60 border-t border-border/60",
+                      !open && "pointer-events-none"
+                    )}
                   >
-                    <span className="font-medium">{r.name}</span>
-                    <span className="font-medium">{formatCzk(Number(r.amount))}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+                    {group.items.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
+                          onClick={() => {
+                            setSelected(r);
+                            setEditing(false);
+                            setActionError(null);
+                          }}
+                        >
+                          <span className="font-medium">{r.name}</span>
+                          <span className="font-medium">
+                            {formatCzk(Number(r.amount))}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <Dialog
