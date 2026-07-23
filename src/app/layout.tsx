@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, Fraunces } from "next/font/google";
+
+import { getSiteUrl } from "@/lib/site";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -13,6 +15,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteUrl()),
   title: "Splitnito",
   description: "Chytré vyúčtování firemních nákladů",
   icons: {

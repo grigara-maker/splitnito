@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { inviteRegisterUrl } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function CompanyPage() {
@@ -41,10 +42,7 @@ export default async function CompanyPage() {
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: true });
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://splitnito.vercel.app";
-  const inviteUrl = `${siteUrl}/register?invite=${company?.invite_code ?? ""}`;
+  const inviteUrl = inviteRegisterUrl(company?.invite_code ?? "");
 
   return (
     <div className="flex flex-col gap-8">

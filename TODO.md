@@ -24,5 +24,6 @@
 ## Čeká na tebe
 
 1. Spusť SQL z `supabase/schema.sql` v Supabase SQL Editoru.
-2. Nastav na Vercelu (a lokálně v `.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GEMINI_API_KEY`.
-3. V Supabase Auth vypni „Confirm email“ (nebo ověř e-maily), ať registrace hned přihlásí.
+2. Nastav na Vercelu (a lokálně v `.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL=https://splitnito.fun`, `GEMINI_API_KEY`.
+3. Na Vercelu přidej doménu `splitnito.fun` a v Supabase → Authentication → URL Configuration nastav Site URL na `https://splitnito.fun` (+ Redirect URLs).
+4. V Supabase Auth vypni „Confirm email“ (nebo ověř e-maily), ať registrace hned přihlásí.
