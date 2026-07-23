@@ -38,7 +38,7 @@ export default async function EventPage({
 
   if (!event || event.company_id !== profile.company_id) notFound();
 
-  const [companyResult, receiptsResult, revenuesResult, settlementResult] =
+  const [companyResult, receiptsResult, revenuesResult, settlementResult, companyReceiptsResult] =
     await Promise.all([
       supabase
         .from("companies")
@@ -64,11 +64,36 @@ export default async function EventPage({
             .eq("event_id", id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      // Všechny doklady firmy (všechny akce) — pro detekci duplicit
+      supabase
+        .from("receipts")
+        .select(
+          "id, vendor, total_amount, purchased_at, created_at, event_id, events!inner(name, company_id)"
+        )
+        .eq("events.company_id", event.company_id),
     ]);
 
   const company = companyResult.data;
   const receiptsRaw = receiptsResult.data;
   const revenuesRaw = revenuesResult.data;
+
+  const companyReceiptKeys = (companyReceiptsResult.data ?? []).map((r) => {
+    const ev = r.events as unknown as
+      | { name: string; company_id: string }
+      | { name: string; company_id: string }[]
+      | null;
+    const eventName = Array.isArray(ev) ? ev[0]?.name : ev?.name;
+    return {
+      id: r.id,
+      vendor: r.vendor,
+      totalAmount: Number(r.total_amount),
+      purchasedAt: r.purchased_at,
+      createdAt: r.created_at,
+      eventId: r.event_id,
+      eventName: eventName ?? "jiná akce",
+    };
+  });
+
 
   const userIds = Array.from(
     new Set(
@@ -175,6 +200,7 @@ export default async function EventPage({
         </h2>
         <ReceiptsOverview
           receipts={receipts}
+          companyReceipts={companyReceiptKeys}
           eventId={event.id}
           currentUserId={userId}
           isCompanyAdmin={isCompanyAdmin}
@@ -192,13 +218,10 @@ export default async function EventPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ReceiptForm eventId={event.id} existingReceipts={receipts.map((r) => ({
-              id: r.id,
-              vendor: r.vendor,
-              totalAmount: Number(r.total_amount),
-              purchasedAt: r.purchased_at,
-              createdAt: r.created_at,
-            }))} />
+            <ReceiptForm
+              eventId={event.id}
+              existingReceipts={companyReceiptKeys}
+            />
           </CardContent>
         </Card>
       ) : null}

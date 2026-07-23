@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Plus, Trash2, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import {
   createReceiptAction,
@@ -95,6 +96,7 @@ export function ReceiptForm({
   existingReceipts?: ReceiptDuplicateKey[];
   onSaved?: () => void;
 }) {
+  const router = useRouter();
   const isEdit = Boolean(initialReceipt);
   const action = isEdit ? updateReceiptAction : createReceiptAction;
   const [state, formAction, pending] = useActionState(action, initial);
@@ -117,26 +119,34 @@ export function ReceiptForm({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
+  const [localExtras, setLocalExtras] = useState<ReceiptDuplicateKey[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const wasPending = useRef(false);
+  const draftRef = useRef({ vendor, totalAmount, purchasedAt });
+  draftRef.current = { vendor, totalAmount, purchasedAt };
 
   const computedItems = useMemo(() => draftsToItems(items), [items]);
   const itemsTotal = useMemo(() => itemsSum(computedItems), [computedItems]);
 
+  const allExisting = useMemo(
+    () => [...existingReceipts, ...localExtras],
+    [existingReceipts, localExtras]
+  );
+
   const duplicateMatch = useMemo(() => {
     const amount = Number(String(totalAmount).replace(",", "."));
-    if (!vendor.trim() || !Number.isFinite(amount)) return null;
+    if (!vendor.trim() || !Number.isFinite(amount) || amount < 0) return null;
     return findMatchingReceipt(
       {
         vendor,
         totalAmount: amount,
         purchasedAt: purchasedAt || null,
       },
-      existingReceipts,
+      allExisting,
       initialReceipt?.id
     );
-  }, [vendor, totalAmount, purchasedAt, existingReceipts, initialReceipt?.id]);
+  }, [vendor, totalAmount, purchasedAt, allExisting, initialReceipt?.id]);
 
   useEffect(() => {
     if (!totalManual && computedItems.length > 0) {
@@ -163,11 +173,26 @@ export function ReceiptForm({
 
     if (!finished || !state.success) return;
 
-    onSaved?.();
     if (!isEdit) {
+      const draft = draftRef.current;
+      const amount = Number(String(draft.totalAmount).replace(",", "."));
+      if (draft.vendor.trim() && Number.isFinite(amount)) {
+        setLocalExtras((prev) => [
+          ...prev,
+          {
+            id: `local-${crypto.randomUUID()}`,
+            vendor: draft.vendor,
+            totalAmount: amount,
+            purchasedAt: draft.purchasedAt || null,
+            eventName: "tato akce",
+          },
+        ]);
+      }
       resetCreateForm();
+      router.refresh();
     }
-  }, [pending, state.success, isEdit, onSaved]);
+    onSaved?.();
+  }, [pending, state.success, isEdit, onSaved, router]);
 
   function updateItem(
     key: string,
@@ -301,21 +326,6 @@ export function ReceiptForm({
         {ocrWarning ? (
           <p className="text-sm text-amber-700 dark:text-amber-500">{ocrWarning}</p>
         ) : null}
-        {duplicateMatch ? (
-          <p
-            className="flex items-start gap-2 text-sm font-medium text-amber-700 dark:text-amber-500"
-            role="status"
-          >
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <span>
-              Duplikát — stejný dodavatel, částka i datum už v této akci je
-              {duplicateMatch.vendor
-                ? ` („${duplicateMatch.vendor}“)`
-                : ""}
-              . Uložte jen pokud jde opravdu o jiný doklad.
-            </span>
-          </p>
-        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -364,6 +374,23 @@ export function ReceiptForm({
           </p>
         ) : null}
       </div>
+
+      {duplicateMatch ? (
+        <p
+          className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-400"
+          role="status"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            Duplikát — stejný dodavatel, částka i datum už ve firmě existuje
+            {duplicateMatch.eventName
+              ? ` (akce „${duplicateMatch.eventName}“)`
+              : ""}
+            {duplicateMatch.vendor ? `, „${duplicateMatch.vendor}“` : ""}.
+            Uložte jen pokud jde opravdu o jiný doklad.
+          </span>
+        </p>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">

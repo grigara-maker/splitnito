@@ -12,7 +12,7 @@ import {
   amountsMismatch,
   itemsSum,
 } from "@/lib/settlement";
-import { findDuplicateReceiptIds } from "@/lib/receipt-duplicates";
+import { findDuplicateReceiptIds, type ReceiptDuplicateKey } from "@/lib/receipt-duplicates";
 import { normalizeReceiptItems, type ReceiptItem } from "@/lib/types/database";
 import { ReceiptForm } from "@/components/app/receipt-form";
 import { Badge } from "@/components/ui/badge";
@@ -60,12 +60,15 @@ function formatDateTime(iso: string) {
 
 export function ReceiptsOverview({
   receipts,
+  companyReceipts,
   eventId,
   currentUserId,
   isCompanyAdmin,
   eventActive,
 }: {
   receipts: ReceiptRow[];
+  /** Doklady celé firmy (všechny akce) pro detekci duplicit. */
+  companyReceipts: ReceiptDuplicateKey[];
   eventId: string;
   currentUserId: string;
   isCompanyAdmin: boolean;
@@ -143,9 +146,10 @@ export function ReceiptsOverview({
           totalAmount: Number(r.total_amount),
           purchasedAt: r.purchased_at,
           createdAt: r.created_at,
-        }))
+        })),
+        companyReceipts
       ),
-    [receipts]
+    [receipts, companyReceipts]
   );
 
   const selectedItems: ReceiptItem[] = selected
@@ -298,13 +302,7 @@ export function ReceiptsOverview({
                 </DialogHeader>
                 <ReceiptForm
                   eventId={eventId}
-                  existingReceipts={receipts.map((r) => ({
-                    id: r.id,
-                    vendor: r.vendor,
-                    totalAmount: Number(r.total_amount),
-                    purchasedAt: r.purchased_at,
-                    createdAt: r.created_at,
-                  }))}
+                  existingReceipts={companyReceipts}
                   initialReceipt={{
                     id: selected.id,
                     vendor: selected.vendor,

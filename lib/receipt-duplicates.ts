@@ -1,39 +1,59 @@
-/** Detekce duplicitních dokladů: stejný dodavatel + částka + datum. */
+/** Detekce duplicitních dokladů: stejný dodavatel + částka + datum (v celé firmě). */
 
 export type ReceiptDuplicateKey = {
   id?: string;
   vendor: string;
   totalAmount: number;
   purchasedAt: string | null;
-  createdAt?: string;
+  createdAt?: string | null;
+  eventId?: string;
+  eventName?: string;
 };
 
+/** Sjednocení názvu dodavatele (bez diakritiky, mezer, velikosti). */
 export function normalizeVendor(vendor: string): string {
-  return vendor.trim().toLowerCase().replace(/\s+/g, " ");
+  return vendor
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
+/**
+ * Kalendářní den nákupu (Europe/Prague).
+ * datetime-local bere zapsané YYYY-MM-DD; ISO timestamp převádí do Prahy.
+ */
 export function receiptDateKey(
   purchasedAt: string | null | undefined,
   createdAt?: string | null
 ): string | null {
-  const raw = purchasedAt || createdAt;
+  const raw = (purchasedAt || createdAt || "").trim();
   if (!raw) return null;
 
-  // datetime-local / date bez timezone — bereme zapsaný kalendářní den
-  if (
-    /^\d{4}-\d{2}-\d{2}/.test(raw) &&
+  // datetime-local: "2024-07-23T14:30" — důvěřuj zapsanému dni
+  const isDatetimeLocal =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) &&
     !/Z$/i.test(raw) &&
-    !/[+-]\d{2}:\d{2}$/.test(raw)
-  ) {
+    !/[+-]\d{2}:\d{2}$/.test(raw);
+  if (isDatetimeLocal) {
     return raw.slice(0, 10);
   }
 
   const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  if (Number.isNaN(d.getTime())) {
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m?.[1] ?? null;
+  }
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
 }
 
 export function roundAmount(amount: number): number {
@@ -43,34 +63,38 @@ export function roundAmount(amount: number): number {
 export function receiptFingerprint(r: ReceiptDuplicateKey): string | null {
   const vendor = normalizeVendor(r.vendor);
   const date = receiptDateKey(r.purchasedAt, r.createdAt);
-  if (!vendor || date == null) return null;
-  if (!Number.isFinite(r.totalAmount)) return null;
-  return `${vendor}|${roundAmount(r.totalAmount).toFixed(2)}|${date}`;
+  const amount = Number(r.totalAmount);
+  if (!vendor || date == null || !Number.isFinite(amount)) return null;
+  return `${vendor}|${roundAmount(amount).toFixed(2)}|${date}`;
 }
 
-/** ID dokladů, které mají alespoň jednoho dalšího se stejným fingerprintem. */
+/**
+ * ID dokladů na stránce, které mají ve firmě (companyReceipts)
+ * alespoň jednoho dalšího se stejným fingerprintem.
+ */
 export function findDuplicateReceiptIds(
-  receipts: ReceiptDuplicateKey[]
+  receiptsOnPage: ReceiptDuplicateKey[],
+  companyReceipts: ReceiptDuplicateKey[] = receiptsOnPage
 ): Set<string> {
-  const byKey = new Map<string, string[]>();
-  for (const r of receipts) {
-    if (!r.id) continue;
+  const counts = new Map<string, number>();
+  for (const r of companyReceipts) {
     const fp = receiptFingerprint(r);
     if (!fp) continue;
-    const list = byKey.get(fp) ?? [];
-    list.push(r.id);
-    byKey.set(fp, list);
+    counts.set(fp, (counts.get(fp) ?? 0) + 1);
   }
 
   const duplicates = new Set<string>();
-  for (const ids of byKey.values()) {
-    if (ids.length < 2) continue;
-    for (const id of ids) duplicates.add(id);
+  for (const r of receiptsOnPage) {
+    if (!r.id) continue;
+    const fp = receiptFingerprint(r);
+    if (fp && (counts.get(fp) ?? 0) >= 2) {
+      duplicates.add(r.id);
+    }
   }
   return duplicates;
 }
 
-/** Najde existující doklad se stejným dodavatelem, částkou a datem (jiný než excludeId). */
+/** Najde existující doklad se stejným dodavatelem, částkou a datem. */
 export function findMatchingReceipt(
   candidate: ReceiptDuplicateKey,
   existing: ReceiptDuplicateKey[],
