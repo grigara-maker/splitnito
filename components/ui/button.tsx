@@ -78,9 +78,9 @@ function Button({
       {isBusy ? (
         <span
           aria-hidden
-          className="absolute inset-0 z-10 flex items-center justify-center rounded-[inherit] bg-black/35 shadow-inner backdrop-blur-[1px]"
+          className="absolute inset-0 z-10 flex items-center justify-center"
         >
-          <Loader2 className="size-4 animate-spin text-white drop-shadow" />
+          <Loader2 className="size-4 animate-spin" />
         </span>
       ) : null}
     </ButtonPrimitive>
