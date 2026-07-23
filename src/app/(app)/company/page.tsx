@@ -74,10 +74,8 @@ export default async function CompanyPage() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Odkaz pro pozvání</p>
-            <div className="mt-1 flex items-start gap-1.5">
-              <p className="min-w-0 flex-1 break-all text-sm font-medium">
-                {inviteUrl}
-              </p>
+            <div className="mt-1 inline-flex max-w-full items-start gap-1">
+              <p className="min-w-0 break-all text-sm font-medium">{inviteUrl}</p>
               <CopyIconButton value={inviteUrl} label="Kopírovat odkaz" />
             </div>
           </div>
