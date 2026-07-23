@@ -19,12 +19,17 @@ export function SettlementView({
   currentUserId,
   eventId,
   canReopen,
+  companyName,
+  eventName,
 }: {
   summary: SettlementSummary;
   currentUserId: string;
   eventId: string;
   canReopen: boolean;
+  companyName: string;
+  eventName: string;
 }) {
+  const paymentMessage = `splitnito - ${companyName} - ${eventName}`;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +126,7 @@ export function SettlementView({
                 transfer={t}
                 currentUserId={currentUserId}
                 eventId={eventId}
+                paymentMessage={paymentMessage}
                 onChanged={() => router.refresh()}
               />
             ))}
@@ -141,11 +147,13 @@ function TransferCard({
   transfer,
   currentUserId,
   eventId,
+  paymentMessage,
   onChanged,
 }: {
   transfer: SettlementTransfer;
   currentUserId: string;
   eventId: string;
+  paymentMessage: string;
   onChanged: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -153,6 +161,8 @@ function TransferCard({
   const isDebtor = transfer.fromUserId === currentUserId;
   const isCreditor = transfer.toUserId === currentUserId;
   const confirmed = transfer.status === "confirmed";
+  const showQr =
+    !confirmed && (isDebtor || isCreditor) && Boolean(transfer.toIban);
 
   return (
     <li className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
@@ -169,37 +179,41 @@ function TransferCard({
         <p className="mt-3 text-sm text-muted-foreground">
           Platba byla potvrzena.
         </p>
-      ) : isDebtor ? (
-        transfer.toIban ? (
+      ) : showQr ? (
+        <>
           <PaymentQr
-            iban={transfer.toIban}
+            iban={transfer.toIban!}
             amount={transfer.amount}
             recipientName={transfer.toName}
-            message={`Splitnito: ${transfer.fromName} → ${transfer.toName}`}
+            message={paymentMessage}
           />
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Příjemce nemá vyplněný IBAN — doplňte ho v profilu.
-          </p>
-        )
-      ) : isCreditor ? (
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            QR kód byl odeslán dlužníkovi, čeká se na zaplacení.
-          </p>
-          <Button
-            loading={pending}
-            onClick={() => {
-              startTransition(async () => {
-                const result = await confirmPaymentAction(eventId, transfer.id);
-                if (result.error) setError(result.error);
-                else onChanged();
-              });
-            }}
-          >
-            Potvrdit zaplacení
-          </Button>
-        </div>
+          {isCreditor ? (
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Po přijetí platby potvrďte zaplacení.
+              </p>
+              <Button
+                loading={pending}
+                onClick={() => {
+                  startTransition(async () => {
+                    const result = await confirmPaymentAction(
+                      eventId,
+                      transfer.id
+                    );
+                    if (result.error) setError(result.error);
+                    else onChanged();
+                  });
+                }}
+              >
+                Potvrdit zaplacení
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : isDebtor || isCreditor ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Příjemce nemá vyplněný IBAN — doplňte ho v profilu.
+        </p>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">
           Platba mezi ostatními členy.
@@ -256,6 +270,9 @@ function PaymentQr({
         </p>
         <p className="font-mono text-xs break-all">{iban}</p>
         <p className="mt-1">{formatCzk(amount)}</p>
+        <p className="mt-2 text-xs">
+          Zpráva: <span className="text-foreground">{message}</span>
+        </p>
       </div>
     </div>
   );

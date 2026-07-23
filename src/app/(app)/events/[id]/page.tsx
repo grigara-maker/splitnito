@@ -49,6 +49,12 @@ export default async function EventPage({
 
   if (!event || event.company_id !== profile.company_id) notFound();
 
+  const { data: company } = await supabase
+    .from("companies")
+    .select("name")
+    .eq("id", event.company_id)
+    .maybeSingle();
+
   const { data: receiptsRaw } = await supabase
     .from("receipts")
     .select(
@@ -187,6 +193,8 @@ export default async function EventPage({
             currentUserId={user.id}
             eventId={event.id}
             canReopen={!settlement.allPaid}
+            companyName={company?.name ?? "firma"}
+            eventName={event.name}
           />
         </section>
       ) : null}
