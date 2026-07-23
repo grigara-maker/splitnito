@@ -172,18 +172,18 @@ export function amountsMismatch(
 /** Akce je ještě „živá“: otevřená, nebo uzavřená a čeká na platby. */
 export function isEventOngoing(
   status: string,
-  settlement: SettlementSummary | null | undefined
+  allPaid: boolean | null | undefined
 ): boolean {
   if (status === "active") return true;
   if (status !== "closed") return false;
-  if (!settlement) return true;
-  return !settlement.allPaid;
+  if (allPaid == null) return true;
+  return !allPaid;
 }
 
 /** Do historie až po úplném zaplacení. */
 export function isEventArchived(
   status: string,
-  settlement: SettlementSummary | null | undefined
+  allPaid: boolean | null | undefined
 ): boolean {
-  return status === "closed" && Boolean(settlement?.allPaid);
+  return status === "closed" && allPaid === true;
 }

@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { AlertTriangle, ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
-import { deleteReceiptAction } from "@/lib/actions/events";
+import {
+  deleteReceiptAction,
+  getReceiptImageUrlAction,
+} from "@/lib/actions/events";
 import { formatCzk } from "@/lib/iban";
 import {
   amountsMismatch,
@@ -72,6 +75,31 @@ export function ReceiptsOverview({
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selected) {
+      setImageUrl(null);
+      setImageLoading(false);
+      return;
+    }
+    if (selected.image_url) {
+      setImageUrl(selected.image_url);
+      return;
+    }
+
+    let cancelled = false;
+    setImageLoading(true);
+    void getReceiptImageUrlAction(selected.id).then((result) => {
+      if (cancelled) return;
+      setImageUrl(result.url);
+      setImageLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   const vendors = useMemo(() => {
     const set = new Set(receipts.map((r) => r.vendor));
@@ -240,7 +268,7 @@ export function ReceiptsOverview({
                     vendor: selected.vendor,
                     totalAmount: Number(selected.total_amount),
                     purchasedAt: selected.purchased_at,
-                    imageUrl: selected.image_url,
+                    imageUrl: imageUrl,
                     items: selected.items,
                   }}
                   onSaved={() => {
@@ -374,15 +402,19 @@ export function ReceiptsOverview({
                   )}
                 </div>
 
-                {selected.image_url ? (
+                {imageUrl ? (
                   <a
-                    href={selected.image_url}
+                    href={imageUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                   >
                     Zobrazit doklad
                   </a>
+                ) : imageLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Načítám odkaz na doklad…
+                  </p>
                 ) : null}
 
                 {actionError ? (

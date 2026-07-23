@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/app/app-nav";
+import { getAppSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({
@@ -28,27 +28,11 @@ export default async function AppLayout({
     );
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, name, company_id, role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile) {
-    redirect("/onboarding");
-  }
+  const { profile } = await getAppSession();
 
   const { data: company } = await supabase
     .from("companies")
-    .select("id, name, invite_code")
+    .select("name")
     .eq("id", profile.company_id)
     .maybeSingle();
 

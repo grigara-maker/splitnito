@@ -1,33 +1,12 @@
-import { redirect } from "next/navigation";
-
 import { HistoryEventList } from "@/components/app/history-event-list";
+import { getAppSession } from "@/lib/auth/session";
 import { formatCzk } from "@/lib/iban";
-import {
-  isEventArchived,
-  normalizeSettlementSummary,
-  type SettlementSummary,
-} from "@/lib/settlement";
+import { isEventArchived } from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HistoryPage() {
+  const { profile } = await getAppSession();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile) {
-    redirect("/onboarding");
-  }
 
   const { data: closedEvents } = await supabase
     .from("events")
@@ -39,25 +18,34 @@ export default async function HistoryPage() {
   const eventIds = (closedEvents ?? []).map((e) => e.id);
   const settlementByEvent = new Map<
     string,
-    { summary: SettlementSummary; closed_at: string }
+    { allPaid: boolean; totalAmount: number; closed_at: string }
   >();
 
   if (eventIds.length > 0) {
     const { data: settlements } = await supabase
       .from("settlements")
-      .select("event_id, summary_data, closed_at")
+      .select(
+        "event_id, closed_at, all_paid:summary_data->>allPaid, total_amount:summary_data->>totalAmount"
+      )
       .in("event_id", eventIds);
 
     for (const row of settlements ?? []) {
-      settlementByEvent.set(row.event_id, {
-        summary: normalizeSettlementSummary(row.summary_data),
-        closed_at: row.closed_at,
+      const r = row as {
+        event_id: string;
+        closed_at: string;
+        all_paid: string | null;
+        total_amount: string | null;
+      };
+      settlementByEvent.set(r.event_id, {
+        allPaid: r.all_paid === "true",
+        totalAmount: Number(r.total_amount ?? 0),
+        closed_at: r.closed_at,
       });
     }
   }
 
   const events = (closedEvents ?? []).filter((event) =>
-    isEventArchived(event.status, settlementByEvent.get(event.id)?.summary)
+    isEventArchived(event.status, settlementByEvent.get(event.id)?.allPaid)
   );
 
   return (
@@ -79,15 +67,15 @@ export default async function HistoryPage() {
         <HistoryEventList
           events={events.map((event) => {
             const settlement = settlementByEvent.get(event.id);
-            const summary = settlement?.summary;
-            const closedAt = settlement?.closed_at;
             return {
               id: event.id,
               name: event.name,
-              dateLabel: closedAt
-                ? new Date(closedAt).toLocaleString("cs-CZ")
+              dateLabel: settlement?.closed_at
+                ? new Date(settlement.closed_at).toLocaleString("cs-CZ")
                 : new Date(event.created_at).toLocaleDateString("cs-CZ"),
-              totalLabel: summary ? formatCzk(summary.totalAmount) : "—",
+              totalLabel: settlement
+                ? formatCzk(settlement.totalAmount)
+                : "—",
             };
           })}
         />

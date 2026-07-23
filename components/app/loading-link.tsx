@@ -13,6 +13,7 @@ export function LoadingLink({
   children,
   spinner = "md",
   layout = "inline",
+  prefetch = true,
 }: {
   href: string;
   className?: string;
@@ -20,6 +21,8 @@ export function LoadingLink({
   spinner?: "sm" | "md";
   /** inline = navbar/tlačítka, block = karty (zachová původní formátování) */
   layout?: "inline" | "block";
+  /** Vypnout prefetch těžkých stránek (detail akce). */
+  prefetch?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -34,6 +37,7 @@ export function LoadingLink({
   return (
     <Link
       href={href}
+      prefetch={prefetch}
       className={cn("relative overflow-hidden", className)}
       aria-busy={loading || undefined}
       onClick={(e) => {

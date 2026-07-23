@@ -224,6 +224,33 @@ export async function deleteReceiptAction(
   return { success: "Doklad byl smazán." };
 }
 
+/** Image URL se stahuje až při otevření detailu dokladu. */
+export async function getReceiptImageUrlAction(
+  receiptId: string
+): Promise<{ url: string | null; error?: string }> {
+  const { supabase, profile } = await requireProfile();
+
+  const { data: receipt } = await supabase
+    .from("receipts")
+    .select("image_url, event_id")
+    .eq("id", receiptId)
+    .maybeSingle();
+
+  if (!receipt) return { url: null, error: "Doklad nenalezen." };
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("company_id")
+    .eq("id", receipt.event_id)
+    .maybeSingle();
+
+  if (!event || event.company_id !== profile.company_id) {
+    return { url: null, error: "Nemáte přístup k tomuto dokladu." };
+  }
+
+  return { url: receipt.image_url ?? null };
+}
+
 export async function closeEventAction(eventId: string): Promise<ActionState> {
   const { supabase, profile } = await requireProfile();
 

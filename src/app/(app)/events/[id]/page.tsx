@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { CloseEventButton } from "@/components/app/close-event-button";
 import { ReceiptForm } from "@/components/app/receipt-form";
@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getAppSession } from "@/lib/auth/session";
 import {
   normalizeSettlementSummary,
   type SettlementSummary,
@@ -24,50 +25,47 @@ export default async function EventPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const { userId, profile } = await getAppSession();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, role, company_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile) redirect("/onboarding");
 
   const { data: event } = await supabase
     .from("events")
-    .select("*")
+    .select("id, name, status, company_id, created_at")
     .eq("id", id)
     .maybeSingle();
 
   if (!event || event.company_id !== profile.company_id) notFound();
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("name")
-    .eq("id", event.company_id)
-    .maybeSingle();
+  const [companyResult, receiptsResult, settlementResult] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("name")
+      .eq("id", event.company_id)
+      .maybeSingle(),
+    supabase
+      .from("receipts")
+      .select(
+        "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, items"
+      )
+      .eq("event_id", id)
+      .order("created_at", { ascending: false }),
+    event.status === "closed"
+      ? supabase
+          .from("settlements")
+          .select("summary_data")
+          .eq("event_id", id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
-  const { data: receiptsRaw } = await supabase
-    .from("receipts")
-    .select(
-      "id, vendor, total_amount, created_at, purchased_at, image_url, user_id, uploader_name, items"
-    )
-    .eq("event_id", id)
-    .order("created_at", { ascending: false });
+  const company = companyResult.data;
+  const receiptsRaw = receiptsResult.data;
 
   const userIds = Array.from(
     new Set(
       (receiptsRaw ?? [])
         .map((r) => r.user_id)
-        .filter((id): id is string => Boolean(id))
+        .filter((uid): uid is string => Boolean(uid))
     )
   );
   const nameByUser = new Map<string, string>();
@@ -83,8 +81,17 @@ export default async function EventPage({
     }
   }
 
+  // image_url se stahuje až při otevření detailu (getReceiptImageUrlAction)
   const receipts = (receiptsRaw ?? []).map((r) => ({
-    ...r,
+    id: r.id,
+    vendor: r.vendor,
+    total_amount: r.total_amount,
+    created_at: r.created_at,
+    purchased_at: r.purchased_at,
+    user_id: r.user_id,
+    uploader_name: r.uploader_name,
+    items: r.items,
+    image_url: null as string | null,
     profiles: {
       name:
         (r.user_id ? nameByUser.get(r.user_id) : null) ??
@@ -95,23 +102,14 @@ export default async function EventPage({
 
   const isCompanyAdmin = profile.role === "company";
   let settlement: SettlementSummary | null = null;
-  if (event.status === "closed") {
-    const { data: row } = await supabase
-      .from("settlements")
-      .select("summary_data")
-      .eq("event_id", id)
-      .maybeSingle();
-    if (row?.summary_data) {
-      settlement = normalizeSettlementSummary(row.summary_data);
-    }
+  if (settlementResult.data?.summary_data) {
+    settlement = normalizeSettlementSummary(settlementResult.data.summary_data);
   }
 
   const waitingPayment = Boolean(
     event.status === "closed" && settlement && !settlement.allPaid
   );
-  const archived = Boolean(
-    event.status === "closed" && settlement?.allPaid
-  );
+  const archived = Boolean(event.status === "closed" && settlement?.allPaid);
 
   return (
     <div className="flex flex-col gap-8">
@@ -155,7 +153,7 @@ export default async function EventPage({
         <ReceiptsOverview
           receipts={receipts}
           eventId={event.id}
-          currentUserId={user.id}
+          currentUserId={userId}
           isCompanyAdmin={isCompanyAdmin}
           eventActive={event.status === "active"}
         />
@@ -190,7 +188,7 @@ export default async function EventPage({
           </h2>
           <SettlementView
             summary={settlement}
-            currentUserId={user.id}
+            currentUserId={userId}
             eventId={event.id}
             canReopen={!settlement.allPaid}
             companyName={company?.name ?? "firma"}

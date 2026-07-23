@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { CreateEventForm } from "@/components/app/create-event-form";
@@ -12,33 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  isEventOngoing,
-  normalizeSettlementSummary,
-  type SettlementSummary,
-} from "@/lib/settlement";
+import { getAppSession } from "@/lib/auth/session";
+import { isEventOngoing } from "@/lib/settlement";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardPage() {
+  const { profile } = await getAppSession();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile) {
-    redirect("/onboarding");
-  }
 
   const { data: allEvents, error: eventsError } = await supabase
     .from("events")
@@ -54,23 +34,22 @@ export default async function DashboardPage() {
     .filter((e) => e.status === "closed")
     .map((e) => e.id);
 
-  const settlementByEvent = new Map<string, SettlementSummary>();
+  const allPaidByEvent = new Map<string, boolean>();
   if (closedIds.length > 0) {
     const { data: settlements } = await supabase
       .from("settlements")
-      .select("event_id, summary_data")
+      .select("event_id, all_paid:summary_data->>allPaid")
       .in("event_id", closedIds);
 
     for (const row of settlements ?? []) {
-      settlementByEvent.set(
-        row.event_id,
-        normalizeSettlementSummary(row.summary_data)
-      );
+      const raw = (row as { event_id: string; all_paid: string | null })
+        .all_paid;
+      allPaidByEvent.set(row.event_id, raw === "true");
     }
   }
 
   const events = (allEvents ?? []).filter((e) =>
-    isEventOngoing(e.status, settlementByEvent.get(e.id))
+    isEventOngoing(e.status, allPaidByEvent.get(e.id))
   );
 
   const eventIds = events.map((e) => e.id);
@@ -125,7 +104,7 @@ export default async function DashboardPage() {
                 name: event.name,
                 waiting:
                   event.status === "closed" &&
-                  !settlementByEvent.get(event.id)?.allPaid,
+                  allPaidByEvent.get(event.id) === false,
                 total: totals.get(event.id) ?? 0,
               }))}
             />
