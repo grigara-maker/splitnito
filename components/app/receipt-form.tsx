@@ -112,6 +112,7 @@ export function ReceiptForm({
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const wasPending = useRef(false);
 
   const computedItems = useMemo(() => draftsToItems(items), [items]);
   const itemsTotal = useMemo(() => itemsSum(computedItems), [computedItems]);
@@ -122,22 +123,30 @@ export function ReceiptForm({
     }
   }, [itemsTotal, computedItems.length, totalManual]);
 
+  function resetCreateForm() {
+    setVendor("");
+    setTotalAmount("");
+    setTotalManual(false);
+    setPurchasedAt(toDatetimeLocalValue(new Date()));
+    setItems([emptyItem()]);
+    setImageUrl("");
+    setOcrWarning(null);
+    setUploadError(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  // Po úspěšném uložení (create) vyčistit formulář — i při opakovaném uložení
   useEffect(() => {
-    if (state.success) {
-      onSaved?.();
-      if (!isEdit) {
-        setVendor("");
-        setTotalAmount("");
-        setTotalManual(false);
-        setPurchasedAt(toDatetimeLocalValue(new Date()));
-        setItems([emptyItem()]);
-        setImageUrl("");
-        setOcrWarning(null);
-        setUploadError(null);
-        formRef.current?.reset();
-      }
+    const finished = wasPending.current && !pending;
+    wasPending.current = pending;
+
+    if (!finished || !state.success) return;
+
+    onSaved?.();
+    if (!isEdit) {
+      resetCreateForm();
     }
-  }, [state.success, isEdit, onSaved]);
+  }, [pending, state.success, isEdit, onSaved]);
 
   function updateItem(
     key: string,
