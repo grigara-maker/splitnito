@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { AlertTriangle, ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 import {
   deleteReceiptAction,
@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 export type ReceiptRow = {
   id: string;
@@ -152,11 +153,13 @@ export function ReceiptsOverview({
   const byUser = useMemo(() => {
     const map = new Map<
       string,
-      { name: string; items: ReceiptRow[]; sum: number }
+      { key: string; name: string; items: ReceiptRow[]; sum: number }
     >();
     for (const r of filtered) {
-      const key = r.user_id ?? `anon:${r.uploader_name ?? profileName(r.profiles)}`;
+      const key =
+        r.user_id ?? `anon:${r.uploader_name ?? profileName(r.profiles)}`;
       const entry = map.get(key) ?? {
+        key,
         name: profileName(r.profiles),
         items: [],
         sum: 0,
@@ -167,6 +170,19 @@ export function ReceiptsOverview({
     }
     return Array.from(map.values()).sort((a, b) => b.sum - a.sum);
   }, [filtered]);
+
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  function toggleUser(key: string) {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const duplicateIds = useMemo(
     () =>
@@ -245,75 +261,112 @@ export function ReceiptsOverview({
       {addForm}
 
       <div className="flex flex-col gap-4">
-        {byUser.map((group) => (
-          <div
-            key={group.name + group.sum}
-            className="rounded-xl bg-card ring-1 ring-foreground/10"
-          >
-            <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-              <p className="font-medium">{group.name}</p>
-              <Badge variant="secondary">{formatCzk(group.sum)}</Badge>
+        {byUser.map((group) => {
+          const open = expandedUsers.has(group.key);
+          return (
+            <div
+              key={group.key}
+              className="rounded-xl bg-card ring-1 ring-foreground/10"
+            >
+              <button
+                type="button"
+                onClick={() => toggleUser(group.key)}
+                aria-expanded={open}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-muted/40"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <ChevronDown
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground transition-transform duration-300",
+                      open ? "rotate-0" : "-rotate-90"
+                    )}
+                    aria-hidden
+                  />
+                  <span className="truncate font-medium">{group.name}</span>
+                </span>
+                <Badge variant="secondary">{formatCzk(group.sum)}</Badge>
+              </button>
+
+              <div
+                className={cn(
+                  "grid transition-[grid-template-rows] duration-300 ease-out",
+                  open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                )}
+              >
+                <div className="overflow-hidden">
+                  <ul
+                    className={cn(
+                      "divide-y divide-border/50 border-t border-border/60",
+                      !open && "pointer-events-none"
+                    )}
+                  >
+                    {group.items.map((r) => {
+                      const when = formatDateTime(
+                        r.purchased_at ?? r.created_at
+                      );
+                      const lineItems = normalizeReceiptItems(r.items);
+                      const mismatch =
+                        lineItems.length > 0 &&
+                        amountsMismatch(
+                          itemsSum(lineItems),
+                          Number(r.total_amount)
+                        );
+                      const isDuplicate = duplicateIds.has(r.id);
+                      return (
+                        <li key={r.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionError(null);
+                              setSelected(r);
+                            }}
+                            className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              {mismatch || isDuplicate ? (
+                                <AlertTriangle
+                                  className={
+                                    isDuplicate
+                                      ? "size-4 shrink-0 self-center text-amber-600"
+                                      : "size-4 shrink-0 self-center text-destructive"
+                                  }
+                                  aria-label={
+                                    isDuplicate
+                                      ? "Možný duplikát"
+                                      : "Nesedí součet položek"
+                                  }
+                                />
+                              ) : null}
+                              <div className="flex min-w-0 items-center gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-medium">{r.vendor}</p>
+                                  <p className="text-muted-foreground">
+                                    {when.date} · {when.time}
+                                  </p>
+                                </div>
+                                {isDuplicate ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="shrink-0 self-center border-amber-600/40 text-amber-700"
+                                  >
+                                    duplikát
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </div>
+                            <span className="font-medium">
+                              {formatCzk(Number(r.total_amount))}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </div>
             </div>
-            <ul className="divide-y divide-border/50">
-              {group.items.map((r) => {
-                const when = formatDateTime(r.purchased_at ?? r.created_at);
-                const lineItems = normalizeReceiptItems(r.items);
-                const mismatch =
-                  lineItems.length > 0 &&
-                  amountsMismatch(itemsSum(lineItems), Number(r.total_amount));
-                const isDuplicate = duplicateIds.has(r.id);
-                return (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActionError(null);
-                        setSelected(r);
-                      }}
-                      className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        {mismatch || isDuplicate ? (
-                          <AlertTriangle
-                            className={
-                              isDuplicate
-                                ? "size-4 shrink-0 self-center text-amber-600"
-                                : "size-4 shrink-0 self-center text-destructive"
-                            }
-                            aria-label={
-                              isDuplicate
-                                ? "Možný duplikát"
-                                : "Nesedí součet položek"
-                            }
-                          />
-                        ) : null}
-                        <div className="flex min-w-0 items-center gap-2">
-                          <div className="min-w-0">
-                            <p className="font-medium">{r.vendor}</p>
-                            <p className="text-muted-foreground">
-                              {when.date} · {when.time}
-                            </p>
-                          </div>
-                          {isDuplicate ? (
-                            <Badge
-                              variant="outline"
-                              className="shrink-0 self-center border-amber-600/40 text-amber-700"
-                            >
-                              duplikát
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                      <span className="font-medium">
-                        {formatCzk(Number(r.total_amount))}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <Dialog
