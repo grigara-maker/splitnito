@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { CreateEventForm } from "@/components/app/create-event-form";
 import { EventCards } from "@/components/app/event-cards";
+import { LoadingLink } from "@/components/app/loading-link";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -148,12 +148,13 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
           <div className="mt-4">
-            <Link
+            <LoadingLink
               href="/history"
+              spinner="sm"
               className={cn(buttonVariants({ variant: "outline" }), "w-full")}
             >
               Historie zaplacených akcí
-            </Link>
+            </LoadingLink>
           </div>
         </aside>
       </div>
