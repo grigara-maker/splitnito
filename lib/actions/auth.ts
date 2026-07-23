@@ -7,6 +7,7 @@ import { isValidIban, normalizeIban } from "@/lib/iban";
 import {
   createServiceClient,
   storagePathFromPublicUrl,
+  wipeReceiptStorageForUsers,
 } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -318,28 +319,34 @@ export async function deleteAccountAction(
       authUserIds.push(user.id);
     }
 
+    // 1) Storage: všechny nahrané fotky účtenek (podle URL i podle složek uživatelů)
     const { data: events } = await supabase
       .from("events")
       .select("id")
       .eq("company_id", profile.company_id);
 
     const eventIds = (events ?? []).map((e) => e.id);
+    const pathSet = new Set<string>();
+
     if (eventIds.length > 0) {
       const { data: receipts } = await supabase
         .from("receipts")
         .select("image_url")
         .in("event_id", eventIds);
 
-      const paths = (receipts ?? [])
-        .map((r) => storagePathFromPublicUrl(r.image_url))
-        .filter((p): p is string => Boolean(p));
-
-      const admin = createServiceClient();
-      if (admin && paths.length > 0) {
-        for (let i = 0; i < paths.length; i += 100) {
-          await admin.storage.from("receipts").remove(paths.slice(i, i + 100));
-        }
+      for (const r of receipts ?? []) {
+        const p = storagePathFromPublicUrl(r.image_url);
+        if (p) pathSet.add(p);
       }
+    }
+
+    const admin = createServiceClient();
+    if (admin) {
+      const paths = Array.from(pathSet);
+      for (let i = 0; i < paths.length; i += 100) {
+        await admin.storage.from("receipts").remove(paths.slice(i, i + 100));
+      }
+      await wipeReceiptStorageForUsers(authUserIds);
     }
   } else if (confirm.toUpperCase() !== "SMAZAT") {
     return {
@@ -353,19 +360,30 @@ export async function deleteAccountAction(
     if (/Could not find the function|schema cache/i.test(error.message)) {
       return {
         error:
-          "V Supabase chybí funkce delete_own_account. Spusťte SQL supabase/migration_delete_account_emails.sql.",
+          "V Supabase chybí funkce delete_own_account. Spusťte SQL supabase/migration_fix_delete_company.sql.",
+      };
+    }
+    if (/character varying = uuid|operator does not exist/i.test(error.message)) {
+      return {
+        error:
+          "V Supabase je stará verze mazání účtu. Spusťte SQL supabase/migration_fix_delete_company.sql a zkuste znovu.",
       };
     }
     return { error: error.message };
   }
 
   // Admin API: jistota, že e-maily (firma i všichni uživatelé) jdou znovu registrovat
-  const admin = createServiceClient();
-  if (admin) {
+  const adminForAuth = createServiceClient();
+  if (adminForAuth) {
     await Promise.all(
       authUserIds.map((id) =>
-        admin.auth.admin.deleteUser(id).catch(() => undefined)
+        adminForAuth.auth.admin.deleteUser(id).catch(() => undefined)
       )
+    );
+  } else if (result === "company") {
+    // SQL hard_delete proběhl; bez service role klíče může zůstat identity edge-case
+    console.warn(
+      "SUPABASE_SERVICE_ROLE_KEY chybí — e-maily spoléhají jen na SQL hard_delete_auth_users."
     );
   }
 
