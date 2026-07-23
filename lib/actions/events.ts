@@ -251,6 +251,133 @@ export async function getReceiptImageUrlAction(
   return { url: receipt.image_url ?? null };
 }
 
+function parseRevenueFields(formData: FormData) {
+  const name = String(formData.get("name") ?? "").trim();
+  const amountRaw = String(formData.get("amount") ?? "").replace(",", ".");
+  const amount = Number(amountRaw);
+
+  if (!name) return { error: "Název akce / tržby je povinný." as const };
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { error: "Zadejte platnou částku tržby." as const };
+  }
+
+  return { name, amount: Math.round(amount * 100) / 100 };
+}
+
+export async function createRevenueAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!eventId) return { error: "Chybí akce." };
+
+  const parsed = parseRevenueFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+
+  const { supabase, user, profile } = await requireProfile();
+
+  if (profile.role === "company") {
+    return {
+      error:
+        "Správce firmy nemůže přidávat tržby. Tržby přidávají jen uživatelé.",
+    };
+  }
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, status")
+    .eq("id", eventId)
+    .single();
+
+  if (!event || event.status !== "active") {
+    return { error: "Tržbu lze přidat jen k aktivní akci." };
+  }
+
+  const { error } = await supabase.from("revenues").insert({
+    event_id: eventId,
+    user_id: user.id,
+    uploader_name: profile.name,
+    name: parsed.name,
+    amount: parsed.amount,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  return { success: "Tržba byla uložena." };
+}
+
+export async function updateRevenueAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const revenueId = String(formData.get("revenueId") ?? "");
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!revenueId || !eventId) return { error: "Chybí tržba." };
+
+  const parsed = parseRevenueFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+
+  const { supabase, user, profile } = await requireProfile();
+
+  const { data: revenue } = await supabase
+    .from("revenues")
+    .select("id, user_id")
+    .eq("id", revenueId)
+    .maybeSingle();
+
+  if (!revenue) return { error: "Tržba nenalezena." };
+
+  const canEdit =
+    revenue.user_id === user.id || profile.role === "company";
+  if (!canEdit) {
+    return { error: "Nemáte oprávnění upravit tuto tržbu." };
+  }
+
+  const { error } = await supabase
+    .from("revenues")
+    .update({
+      name: parsed.name,
+      amount: parsed.amount,
+    })
+    .eq("id", revenueId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  return { success: "Tržba byla upravena." };
+}
+
+export async function deleteRevenueAction(
+  revenueId: string,
+  eventId: string
+): Promise<ActionState> {
+  const { supabase, user, profile } = await requireProfile();
+
+  const { data: revenue } = await supabase
+    .from("revenues")
+    .select("id, user_id")
+    .eq("id", revenueId)
+    .maybeSingle();
+
+  if (!revenue) return { error: "Tržba nenalezena." };
+
+  const canDelete =
+    revenue.user_id === user.id || profile.role === "company";
+  if (!canDelete) {
+    return { error: "Nemáte oprávnění smazat tuto tržbu." };
+  }
+
+  const { error } = await supabase
+    .from("revenues")
+    .delete()
+    .eq("id", revenueId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  return { success: "Tržba byla smazána." };
+}
+
 export async function closeEventAction(eventId: string): Promise<ActionState> {
   const { supabase, profile } = await requireProfile();
 
@@ -268,17 +395,22 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
   }
 
   // Vyúčtování jen mezi uživateli (ne správcem firmy)
-  const [{ data: members }, { data: receipts }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, name, iban, role")
-      .eq("company_id", profile.company_id)
-      .eq("role", "member"),
-    supabase
-      .from("receipts")
-      .select("user_id, total_amount")
-      .eq("event_id", eventId),
-  ]);
+  const [{ data: members }, { data: receipts }, { data: revenues }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, name, iban, role")
+        .eq("company_id", profile.company_id)
+        .eq("role", "member"),
+      supabase
+        .from("receipts")
+        .select("user_id, total_amount")
+        .eq("event_id", eventId),
+      supabase
+        .from("revenues")
+        .select("user_id, amount")
+        .eq("event_id", eventId),
+    ]);
 
   if (!members?.length) {
     return {
@@ -288,12 +420,21 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
   }
 
   const memberIds = new Set(members.map((m) => m.id));
-  const paidByUser = new Map<string, number>();
+  const expensesByUser = new Map<string, number>();
   for (const r of receipts ?? []) {
     if (!r.user_id || !memberIds.has(r.user_id)) continue;
-    paidByUser.set(
+    expensesByUser.set(
       r.user_id,
-      (paidByUser.get(r.user_id) ?? 0) + Number(r.total_amount)
+      (expensesByUser.get(r.user_id) ?? 0) + Number(r.total_amount)
+    );
+  }
+
+  const revenuesByUser = new Map<string, number>();
+  for (const rev of revenues ?? []) {
+    if (!rev.user_id || !memberIds.has(rev.user_id)) continue;
+    revenuesByUser.set(
+      rev.user_id,
+      (revenuesByUser.get(rev.user_id) ?? 0) + Number(rev.amount)
     );
   }
 
@@ -302,7 +443,8 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
       userId: m.id,
       name: m.name,
       iban: m.iban,
-      paid: paidByUser.get(m.id) ?? 0,
+      expenses: expensesByUser.get(m.id) ?? 0,
+      revenues: revenuesByUser.get(m.id) ?? 0,
     }))
   );
 

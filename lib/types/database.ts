@@ -151,6 +151,51 @@ export type Database = {
           },
         ];
       };
+      revenues: {
+        Row: {
+          id: string;
+          event_id: string;
+          user_id: string | null;
+          uploader_name: string | null;
+          name: string;
+          amount: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_id: string;
+          user_id?: string | null;
+          uploader_name?: string | null;
+          name: string;
+          amount: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_id?: string;
+          user_id?: string | null;
+          uploader_name?: string | null;
+          name?: string;
+          amount?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "revenues_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "revenues_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       settlements: {
         Row: {
           id: string;
@@ -223,6 +268,7 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Company = Database["public"]["Tables"]["companies"]["Row"];
 export type Event = Database["public"]["Tables"]["events"]["Row"];
 export type Receipt = Database["public"]["Tables"]["receipts"]["Row"];
+export type Revenue = Database["public"]["Tables"]["revenues"]["Row"];
 export type Settlement = Database["public"]["Tables"]["settlements"]["Row"];
 
 export type ReceiptItem = {

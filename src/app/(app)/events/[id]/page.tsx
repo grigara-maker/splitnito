@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { CloseEventButton } from "@/components/app/close-event-button";
 import { ReceiptForm } from "@/components/app/receipt-form";
 import { ReceiptsOverview } from "@/components/app/receipts-overview";
+import { RevenueForm } from "@/components/app/revenue-form";
+import { RevenuesOverview } from "@/components/app/revenues-overview";
 import { SettlementView } from "@/components/app/settlement-view";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,36 +38,44 @@ export default async function EventPage({
 
   if (!event || event.company_id !== profile.company_id) notFound();
 
-  const [companyResult, receiptsResult, settlementResult] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("name")
-      .eq("id", event.company_id)
-      .maybeSingle(),
-    supabase
-      .from("receipts")
-      .select(
-        "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, items"
-      )
-      .eq("event_id", id)
-      .order("created_at", { ascending: false }),
-    event.status === "closed"
-      ? supabase
-          .from("settlements")
-          .select("summary_data")
-          .eq("event_id", id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
+  const [companyResult, receiptsResult, revenuesResult, settlementResult] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select("name")
+        .eq("id", event.company_id)
+        .maybeSingle(),
+      supabase
+        .from("receipts")
+        .select(
+          "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, items"
+        )
+        .eq("event_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("revenues")
+        .select("id, name, amount, created_at, user_id, uploader_name")
+        .eq("event_id", id)
+        .order("created_at", { ascending: false }),
+      event.status === "closed"
+        ? supabase
+            .from("settlements")
+            .select("summary_data")
+            .eq("event_id", id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
   const company = companyResult.data;
   const receiptsRaw = receiptsResult.data;
+  const revenuesRaw = revenuesResult.data;
 
   const userIds = Array.from(
     new Set(
-      (receiptsRaw ?? [])
-        .map((r) => r.user_id)
-        .filter((uid): uid is string => Boolean(uid))
+      [
+        ...(receiptsRaw ?? []).map((r) => r.user_id),
+        ...(revenuesRaw ?? []).map((r) => r.user_id),
+      ].filter((uid): uid is string => Boolean(uid))
     )
   );
   const nameByUser = new Map<string, string>();
@@ -81,6 +91,14 @@ export default async function EventPage({
     }
   }
 
+  const resolveName = (
+    uid: string | null,
+    uploaderName: string | null | undefined
+  ) =>
+    (uid ? nameByUser.get(uid) : null) ??
+    uploaderName ??
+    "Bývalý uživatel";
+
   // image_url se stahuje až při otevření detailu (getReceiptImageUrlAction)
   const receipts = (receiptsRaw ?? []).map((r) => ({
     id: r.id,
@@ -92,12 +110,17 @@ export default async function EventPage({
     uploader_name: r.uploader_name,
     items: r.items,
     image_url: null as string | null,
-    profiles: {
-      name:
-        (r.user_id ? nameByUser.get(r.user_id) : null) ??
-        r.uploader_name ??
-        "Bývalý uživatel",
-    },
+    profiles: { name: resolveName(r.user_id, r.uploader_name) },
+  }));
+
+  const revenues = (revenuesRaw ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    amount: r.amount,
+    created_at: r.created_at,
+    user_id: r.user_id,
+    uploader_name: r.uploader_name,
+    profiles: { name: resolveName(r.user_id, r.uploader_name) },
   }));
 
   const isCompanyAdmin = profile.role === "company";
@@ -138,7 +161,7 @@ export default async function EventPage({
             </Badge>
           </div>
           <p className="mt-1 text-muted-foreground">
-            Přehled dokladů a vyúčtování ve Splitnito.
+            Přehled dokladů, tržeb a vyúčtování ve Splitnito.
           </p>
         </div>
         {event.status === "active" ? (
@@ -174,10 +197,38 @@ export default async function EventPage({
         </Card>
       ) : null}
 
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Tržby
+        </h2>
+        <RevenuesOverview
+          revenues={revenues}
+          eventId={event.id}
+          currentUserId={userId}
+          isCompanyAdmin={isCompanyAdmin}
+          eventActive={event.status === "active"}
+        />
+      </section>
+
+      {event.status === "active" && !isCompanyAdmin ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Přidat tržby</CardTitle>
+            <CardDescription>
+              Kdo si bere tržbu domů, zapište název a částku — odečte se ve
+              vyúčtování (výdaje − tržby).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RevenueForm eventId={event.id} />
+          </CardContent>
+        </Card>
+      ) : null}
+
       {event.status === "active" && isCompanyAdmin ? (
         <p className="text-sm text-muted-foreground">
-          Jako správce firmy vidíte všechny doklady a můžete je upravit nebo
-          smazat. Přidávat doklady mohou jen uživatelé.
+          Jako správce firmy vidíte všechny doklady a tržby a můžete je upravit
+          nebo smazat. Přidávat je mohou jen uživatelé.
         </p>
       ) : null}
 

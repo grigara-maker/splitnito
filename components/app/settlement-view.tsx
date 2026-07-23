@@ -65,9 +65,13 @@ export function SettlementView({
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Celkem utraceno" value={formatCzk(summary.totalAmount)} />
-        <Stat label="Počet uživatelů" value={String(summary.memberCount)} />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Celkem výdaje" value={formatCzk(summary.totalExpenses)} />
+        <Stat label="Celkem tržby" value={formatCzk(summary.totalRevenues)} />
+        <Stat
+          label="Do vyúčtování"
+          value={formatCzk(summary.totalAmount)}
+        />
         <Stat label="Stejný podíl" value={formatCzk(summary.averageShare)} />
       </div>
 
@@ -87,7 +91,12 @@ export function SettlementView({
                   {m.userId === currentUserId ? " (vy)" : ""}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Zaplaceno {formatCzk(m.paid)}
+                  Výdaje {formatCzk(m.expenses)}
+                  {m.revenues > 0.005
+                    ? ` · tržby ${formatCzk(m.revenues)}`
+                    : ""}
+                  {" → "}
+                  {formatCzk(m.paid)}
                 </p>
               </div>
               <p

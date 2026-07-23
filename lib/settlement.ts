@@ -2,7 +2,10 @@ export type SettlementMember = {
   userId: string;
   name: string;
   iban: string | null;
+  /** Čistý příspěvek do vyúčtování = výdaje − tržby */
   paid: number;
+  expenses: number;
+  revenues: number;
   share: number;
   balance: number;
 };
@@ -21,7 +24,10 @@ export type SettlementTransfer = {
 };
 
 export type SettlementSummary = {
+  /** Čistý součet (výdaje − tržby) — základ pro podíl */
   totalAmount: number;
+  totalExpenses: number;
+  totalRevenues: number;
   memberCount: number;
   averageShare: number;
   members: SettlementMember[];
@@ -40,23 +46,55 @@ export function transferKey(t: {
 /**
  * Férové dělení mezi uživateli (equal split).
  *
- * Každý má platit průměr (total / počet uživatelů).
- * balance = zaplaceno − průměr
- *   > 0 → má dostat (přeplatil)
- *   < 0 → má doplatit
+ * Každý člen má:
+ *   expenses = součet dokladů
+ *   revenues = součet tržeb, které si vzal domů
+ *   paid     = expenses − revenues  (čistý příspěvek)
  *
- * 2 uživatelé: kdo zaplatil míň, pošle druhému přesně rozdíl / 2
- *   (tj. doplatí, aby oba měli stejnou útratu).
- * Více uživatelů: greedy pairing dlužníků a věřitelů (min. počet převodů).
+ * Podíl = Σ paid / počet členů
+ * balance = paid − podíl
+ *   > 0 → má dostat (přeplatil / méně tržeb)
+ *   < 0 → má doplatit (nebo si vzal víc tržeb)
  */
 export function calculateSettlement(
-  members: { userId: string; name: string; iban: string | null; paid: number }[]
+  members: {
+    userId: string;
+    name: string;
+    iban: string | null;
+    expenses?: number;
+    revenues?: number;
+    /** Legacy: pokud chybí expenses, ber paid jako výdaje */
+    paid?: number;
+  }[]
 ): SettlementSummary {
   const memberCount = members.length;
-  const totalAmount = members.reduce((sum, m) => sum + m.paid, 0);
+  const normalized = members.map((m) => {
+    const expenses = roundMoney(
+      m.expenses ?? (m.paid != null ? Number(m.paid) : 0)
+    );
+    const revenues = roundMoney(m.revenues ?? 0);
+    return {
+      userId: m.userId,
+      name: m.name,
+      iban: m.iban,
+      expenses,
+      revenues,
+      paid: roundMoney(expenses - revenues),
+    };
+  });
+
+  const totalExpenses = roundMoney(
+    normalized.reduce((sum, m) => sum + m.expenses, 0)
+  );
+  const totalRevenues = roundMoney(
+    normalized.reduce((sum, m) => sum + m.revenues, 0)
+  );
+  const totalAmount = roundMoney(
+    normalized.reduce((sum, m) => sum + m.paid, 0)
+  );
   const averageShare = memberCount === 0 ? 0 : totalAmount / memberCount;
 
-  const settledMembers: SettlementMember[] = members.map((m) => ({
+  const settledMembers: SettlementMember[] = normalized.map((m) => ({
     ...m,
     share: averageShare,
     balance: roundMoney(m.paid - averageShare),
@@ -104,6 +142,8 @@ export function calculateSettlement(
 
   return {
     totalAmount: roundMoney(totalAmount),
+    totalExpenses,
+    totalRevenues,
     memberCount,
     averageShare: roundMoney(averageShare),
     members: settledMembers,
@@ -138,11 +178,41 @@ export function normalizeSettlementSummary(raw: unknown): SettlementSummary {
     status: t.status === "confirmed" ? "confirmed" : "pending",
   }));
 
+  const members: SettlementMember[] = (data.members ?? []).map((m) => {
+    const expenses = Number(
+      m.expenses ?? (m.revenues != null ? Number(m.paid) + Number(m.revenues) : m.paid) ??
+        0
+    );
+    const revenues = Number(m.revenues ?? 0);
+    const paid = Number(m.paid ?? expenses - revenues);
+    return {
+      userId: m.userId,
+      name: m.name,
+      iban: m.iban ?? null,
+      expenses,
+      revenues,
+      paid,
+      share: Number(m.share ?? 0),
+      balance: Number(m.balance ?? 0),
+    };
+  });
+
+  const totalExpenses = Number(
+    data.totalExpenses ??
+      members.reduce((s, m) => s + m.expenses, 0)
+  );
+  const totalRevenues = Number(
+    data.totalRevenues ??
+      members.reduce((s, m) => s + m.revenues, 0)
+  );
+
   return {
     totalAmount: Number(data.totalAmount ?? 0),
-    memberCount: Number(data.memberCount ?? 0),
+    totalExpenses,
+    totalRevenues,
+    memberCount: Number(data.memberCount ?? members.length),
     averageShare: Number(data.averageShare ?? 0),
-    members: (data.members ?? []) as SettlementMember[],
+    members,
     transfers,
     allPaid:
       typeof data.allPaid === "boolean"
