@@ -1,12 +1,19 @@
 "use client";
 
+import { Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { deleteEventAction } from "@/lib/actions/events";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-export function DeleteEventButton({
+export function EventHeaderMenu({
   eventId,
   eventName,
 }: {
@@ -41,16 +48,15 @@ export function DeleteEventButton({
 
   if (confirming) {
     return (
-      <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
-        <p className="text-sm text-muted-foreground sm:text-right">
-          Opravdu smazat akci „{eventName}“? Smažou se všechny doklady, tržby a
-          vyúčtování. Tuto akci nelze vrátit.
+      <div className="flex max-w-[14rem] flex-col items-end gap-2 sm:max-w-xs">
+        <p className="text-right text-xs text-muted-foreground sm:text-sm">
+          Opravdu smazat „{eventName}“? Smažou se doklady, tržby i vyúčtování.
         </p>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"
             variant="destructive"
-            className="w-full sm:w-auto"
+            size="sm"
             loading={loading}
             onClick={() => void handleDelete()}
           >
@@ -59,7 +65,7 @@ export function DeleteEventButton({
           <Button
             type="button"
             variant="outline"
-            className="w-full sm:w-auto"
+            size="sm"
             disabled={loading}
             onClick={() => {
               if (loading) return;
@@ -71,7 +77,7 @@ export function DeleteEventButton({
           </Button>
         </div>
         {error ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-right text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
@@ -80,23 +86,31 @@ export function DeleteEventButton({
   }
 
   return (
-    <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full touch-manipulation text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
-        onClick={() => {
-          setError(null);
-          setConfirming(true);
-        }}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground"
+            aria-label="Menu akce"
+          />
+        }
       >
-        Smazat akci
-      </Button>
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </div>
+        <Menu className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-40 w-auto">
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => {
+            setError(null);
+            setConfirming(true);
+          }}
+        >
+          Smazat akci
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

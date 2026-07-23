@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { CloseEventButton } from "@/components/app/close-event-button";
-import { DeleteEventButton } from "@/components/app/delete-event-button";
+import { EventHeaderMenu } from "@/components/app/event-header-menu";
 import { ReceiptsOverview } from "@/components/app/receipts-overview";
 import { RevenueForm } from "@/components/app/revenue-form";
 import { RevenuesOverview } from "@/components/app/revenues-overview";
@@ -125,40 +125,44 @@ export default async function EventPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="font-heading text-3xl font-semibold tracking-tight">
-              {event.name}
-            </h1>
-            <Badge
-              variant={
-                event.status === "active"
-                  ? "secondary"
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-heading text-3xl font-semibold tracking-tight">
+                {event.name}
+              </h1>
+              <Badge
+                variant={
+                  event.status === "active"
+                    ? "secondary"
+                    : waitingPayment
+                      ? "outline"
+                      : "secondary"
+                }
+              >
+                {event.status === "active"
+                  ? "Aktivní"
                   : waitingPayment
-                    ? "outline"
-                    : "secondary"
-              }
-            >
-              {event.status === "active"
-                ? "Aktivní"
-                : waitingPayment
-                  ? "Čeká na platby"
-                  : archived
-                    ? "Hotovo"
-                    : "Uzavřená"}
-            </Badge>
+                    ? "Čeká na platby"
+                    : archived
+                      ? "Hotovo"
+                      : "Uzavřená"}
+              </Badge>
+            </div>
+            <p className="mt-1 text-muted-foreground">
+              Přehled dokladů, tržeb a vyúčtování ve Splitnito.
+            </p>
           </div>
-          <p className="mt-1 text-muted-foreground">
-            Přehled dokladů, tržeb a vyúčtování ve Splitnito.
-          </p>
+          <div className="shrink-0 pt-1">
+            <EventHeaderMenu eventId={event.id} eventName={event.name} />
+          </div>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-          {event.status === "active" ? (
+        {event.status === "active" ? (
+          <div className="flex justify-end">
             <CloseEventButton eventId={event.id} />
-          ) : null}
-          <DeleteEventButton eventId={event.id} eventName={event.name} />
-        </div>
+          </div>
+        ) : null}
       </div>
 
       <section className="flex flex-col gap-4">
