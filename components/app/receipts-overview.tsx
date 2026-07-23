@@ -245,21 +245,21 @@ export function ReceiptsOverview({
                             }
                           />
                         ) : null}
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="min-w-0">
                             <p className="font-medium">{r.vendor}</p>
-                            {isDuplicate ? (
-                              <Badge
-                                variant="outline"
-                                className="shrink-0 border-amber-600/40 text-amber-700"
-                              >
-                                duplikát
-                              </Badge>
-                            ) : null}
+                            <p className="text-muted-foreground">
+                              {when.date} · {when.time}
+                            </p>
                           </div>
-                          <p className="text-muted-foreground">
-                            {when.date} · {when.time}
-                          </p>
+                          {isDuplicate ? (
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 self-center border-amber-600/40 text-amber-700"
+                            >
+                              duplikát
+                            </Badge>
+                          ) : null}
                         </div>
                       </div>
                       <span className="font-medium">
