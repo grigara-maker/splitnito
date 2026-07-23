@@ -381,7 +381,7 @@ export function ReceiptsOverview({
                     rel="noreferrer"
                     className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    Otevřít fotku účtenky
+                    Zobrazit doklad
                   </a>
                 ) : null}
 
