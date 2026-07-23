@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
 
 import { loginAction, type AuthState } from "@/lib/actions/auth";
-import { AppleAuthButton } from "@/components/auth/apple-auth-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,8 +19,6 @@ const initial: AuthState = {};
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initial);
-  const searchParams = useSearchParams();
-  const oauthError = searchParams.get("error");
 
   return (
     <Card className="w-full max-w-md bg-card/90 shadow-lg shadow-primary/5 backdrop-blur-md">
@@ -32,17 +28,7 @@ export function LoginForm() {
           Přihlaste se do svého účtu ve Splitnito.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <AppleAuthButton next="/dashboard" label="Přihlásit se přes Apple" />
-
-        <div className="relative py-1 text-center text-xs text-muted-foreground">
-          <span className="relative z-10 bg-card px-2">nebo e-mailem</span>
-          <span
-            aria-hidden
-            className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border"
-          />
-        </div>
-
+      <CardContent>
         <form action={formAction} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="email">E-mail</Label>
@@ -66,11 +52,6 @@ export function LoginForm() {
               placeholder="••••••••"
             />
           </div>
-          {oauthError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {oauthError}
-            </p>
-          ) : null}
           {state.error ? (
             <p className="text-sm text-destructive" role="alert">
               {state.error}
@@ -80,7 +61,7 @@ export function LoginForm() {
             Přihlásit se
           </Button>
         </form>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Nemáte účet?{" "}
           <Link
             href="/register"

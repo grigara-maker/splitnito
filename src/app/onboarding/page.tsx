@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { OnboardingForm } from "@/components/app/onboarding-form";
@@ -10,30 +9,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
-import type { User } from "@supabase/supabase-js";
-
-function nameFromUser(user: User): string {
-  const meta = user.user_metadata ?? {};
-  if (typeof meta.name === "string" && meta.name.trim()) {
-    return meta.name.trim();
-  }
-  if (typeof meta.full_name === "string" && meta.full_name.trim()) {
-    return meta.full_name.trim();
-  }
-  const full = meta.full_name;
-  if (full && typeof full === "object") {
-    const given =
-      typeof (full as { givenName?: string }).givenName === "string"
-        ? (full as { givenName: string }).givenName
-        : "";
-    const family =
-      typeof (full as { familyName?: string }).familyName === "string"
-        ? (full as { familyName: string }).familyName
-        : "";
-    return `${given} ${family}`.trim();
-  }
-  return "";
-}
 
 export default async function OnboardingPage({
   searchParams,
@@ -68,6 +43,11 @@ export default async function OnboardingPage({
     redirect("/dashboard");
   }
 
+  const defaultName =
+    typeof user.user_metadata?.name === "string"
+      ? user.user_metadata.name
+      : "";
+
   return (
     <div className="relative flex min-h-full flex-1 flex-col items-center justify-center px-6 py-12">
       <div
@@ -78,27 +58,25 @@ export default async function OnboardingPage({
         <div className="text-center">
           <p className="font-heading text-lg font-semibold">Splitnito</p>
           <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
-            Dokončení Apple účtu
+            Dokončení účtu
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Poslední krok — firma nebo kód pozvánky a IBAN.
+            Zvolte, jestli zakládáte firmu, nebo se připojujete jako uživatel.
           </p>
         </div>
         <Card className="bg-card/90 shadow-lg backdrop-blur-md">
           <CardHeader>
             <CardTitle>Profil ve Splitnito</CardTitle>
             <CardDescription>
-              Bez tohoto kroku se do aplikace nedostanete.
+              Firma získá invite kód. Uživatel zadá kód firmy.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Suspense fallback={null}>
-              <OnboardingForm
-                defaultName={nameFromUser(user)}
-                defaultEmail={user.email ?? ""}
-                defaultInvite={invite}
-              />
-            </Suspense>
+            <OnboardingForm
+              defaultName={defaultName}
+              defaultEmail={user.email ?? ""}
+              defaultInvite={invite}
+            />
           </CardContent>
         </Card>
       </div>

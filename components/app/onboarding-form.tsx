@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 import { completeOnboardingAction } from "@/lib/actions/onboarding";
 import type { AuthState } from "@/lib/actions/auth";
@@ -21,27 +20,17 @@ export function OnboardingForm({
   defaultEmail?: string;
   defaultInvite?: string;
 }) {
-  const searchParams = useSearchParams();
-  const setupError = searchParams.get("error");
-  const inviteFromUrl = searchParams.get("invite")?.trim().toUpperCase();
-  const invite = defaultInvite ?? inviteFromUrl;
-
   const [state, formAction, pending] = useActionState(
     completeOnboardingAction,
     initial
   );
   const [accountType, setAccountType] = useState<"company" | "member">(
-    invite ? "member" : "company"
+    defaultInvite ? "member" : "company"
   );
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="accountType" value={accountType} />
-
-      <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-        Apple účet je hotový. Doplňte, jestli zakládáte firmu, nebo se
-        připojujete kódem — včetně IBAN pro QR platby.
-      </p>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="email">E-mail</Label>
@@ -81,7 +70,7 @@ export function OnboardingForm({
 
         <TabsContent value="member" className="mt-4 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Zadejte kód firmy a volitelně IBAN pro QR platby.
+            Zadejte kód firmy — účet se k ní trvale přidruží.
           </p>
           <div className="flex flex-col gap-2">
             <Label htmlFor="name">Vaše jméno</Label>
@@ -100,7 +89,7 @@ export function OnboardingForm({
               name="inviteCode"
               placeholder="ABCD1234"
               required={accountType === "member"}
-              defaultValue={invite ?? ""}
+              defaultValue={defaultInvite ?? ""}
               className="uppercase"
             />
           </div>
@@ -118,11 +107,6 @@ export function OnboardingForm({
         </TabsContent>
       </Tabs>
 
-      {setupError ? (
-        <p className="text-sm text-destructive" role="alert">
-          {setupError}
-        </p>
-      ) : null}
       {state.error ? (
         <p className="text-sm text-destructive" role="alert">
           {state.error}
