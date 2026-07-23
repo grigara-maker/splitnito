@@ -245,18 +245,16 @@ export function ReceiptsOverview({
                             }
                           />
                         ) : null}
+                        {isDuplicate ? (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 border-amber-600/40 text-amber-700"
+                          >
+                            duplikát
+                          </Badge>
+                        ) : null}
                         <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium">{r.vendor}</p>
-                            {isDuplicate ? (
-                              <Badge
-                                variant="outline"
-                                className="border-amber-600/40 text-amber-700"
-                              >
-                                duplikát
-                              </Badge>
-                            ) : null}
-                          </div>
+                          <p className="font-medium">{r.vendor}</p>
                           <p className="text-muted-foreground">
                             {when.date} · {when.time}
                           </p>
