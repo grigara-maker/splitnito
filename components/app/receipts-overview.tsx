@@ -230,13 +230,13 @@ export function ReceiptsOverview({
                       }}
                       className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-center gap-2">
                         {mismatch || isDuplicate ? (
                           <AlertTriangle
                             className={
                               isDuplicate
-                                ? "mt-0.5 size-4 shrink-0 text-amber-600"
-                                : "mt-0.5 size-4 shrink-0 text-destructive"
+                                ? "size-4 shrink-0 text-amber-600"
+                                : "size-4 shrink-0 text-destructive"
                             }
                             aria-label={
                               isDuplicate
