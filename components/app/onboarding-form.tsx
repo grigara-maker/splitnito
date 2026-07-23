@@ -14,16 +14,18 @@ const initial: AuthState = {};
 export function OnboardingForm({
   defaultName,
   defaultEmail,
+  defaultInvite,
 }: {
   defaultName?: string;
   defaultEmail?: string;
+  defaultInvite?: string;
 }) {
   const [state, formAction, pending] = useActionState(
     completeOnboardingAction,
     initial
   );
   const [accountType, setAccountType] = useState<"company" | "member">(
-    "company"
+    defaultInvite ? "member" : "company"
   );
 
   return (
@@ -87,6 +89,7 @@ export function OnboardingForm({
               name="inviteCode"
               placeholder="ABCD1234"
               required={accountType === "member"}
+              defaultValue={defaultInvite ?? ""}
               className="uppercase"
             />
           </div>

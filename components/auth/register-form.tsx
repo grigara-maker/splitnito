@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { registerAction, type AuthState } from "@/lib/actions/auth";
+import { AppleAuthButton } from "@/components/auth/apple-auth-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,6 +29,10 @@ export function RegisterForm({
     defaultInvite ? "member" : "company"
   );
 
+  const appleNext = defaultInvite
+    ? `/onboarding?invite=${encodeURIComponent(defaultInvite)}`
+    : "/onboarding";
+
   return (
     <Card className="w-full max-w-md bg-card/90 shadow-lg shadow-primary/5 backdrop-blur-md">
       <CardHeader>
@@ -36,7 +41,23 @@ export function RegisterForm({
           Zvolte, jestli zakládáte firmu, nebo se připojujete jako uživatel.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
+        <AppleAuthButton
+          next={appleNext}
+          label="Registrovat se přes Apple"
+        />
+        <p className="text-center text-xs text-muted-foreground">
+          Po Apple dokončíte firmu nebo kód pozvánky v dalším kroku.
+        </p>
+
+        <div className="relative py-1 text-center text-xs text-muted-foreground">
+          <span className="relative z-10 bg-card px-2">nebo e-mailem</span>
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border"
+          />
+        </div>
+
         <form action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="accountType" value={accountType} />
 
@@ -138,7 +159,7 @@ export function RegisterForm({
             {accountType === "company" ? "Založit firmu" : "Připojit se k firmě"}
           </Button>
         </form>
-        <p className="mt-6 text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm text-muted-foreground">
           Už máte účet?{" "}
           <Link
             href="/login"

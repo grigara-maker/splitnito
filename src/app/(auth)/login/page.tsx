@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/login-form";
@@ -14,8 +15,10 @@ export default function LoginPage() {
           Splitnito
         </Link>
       </div>
-      <div className="relative z-10 w-full flex justify-center">
-        <LoginForm />
+      <div className="relative z-10 flex w-full justify-center">
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );

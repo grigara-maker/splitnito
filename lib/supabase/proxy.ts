@@ -41,6 +41,7 @@ export async function updateSession(request: NextRequest) {
     const isProtected =
       path.startsWith("/dashboard") ||
       path.startsWith("/profile") ||
+      path.startsWith("/company") ||
       path.startsWith("/events") ||
       path.startsWith("/history") ||
       path.startsWith("/onboarding") ||
@@ -56,8 +57,14 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (user && isAuthRoute) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
+      url.pathname = profile ? "/dashboard" : "/onboarding";
       return NextResponse.redirect(url);
     }
 

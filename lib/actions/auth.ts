@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isValidIban, normalizeIban } from "@/lib/iban";
+import { getSiteUrl } from "@/lib/site";
 import {
   createServiceClient,
   storagePathFromPublicUrl,
@@ -35,6 +36,36 @@ export async function loginAction(
   }
 
   redirect("/dashboard");
+}
+
+/** OAuth přes Apple — po návratu dokončí profil na /onboarding, pokud chybí. */
+export async function signInWithAppleAction(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
+  const next =
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//")
+      ? nextRaw
+      : "/dashboard";
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "apple",
+    options: {
+      redirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+      scopes: "name email",
+    },
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+  if (!data.url) {
+    return { error: "Nepodařilo se spustit přihlášení přes Apple." };
+  }
+
+  redirect(data.url);
 }
 
 export async function registerAction(
