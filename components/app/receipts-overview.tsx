@@ -230,41 +230,37 @@ export function ReceiptsOverview({
                       }}
                       className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left text-sm transition hover:bg-muted/50"
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          {mismatch || isDuplicate ? (
-                            <AlertTriangle
-                              className={
-                                isDuplicate
-                                  ? "size-4 shrink-0 text-amber-600"
-                                  : "size-4 shrink-0 text-destructive"
-                              }
-                              aria-label={
-                                isDuplicate
-                                  ? "Možný duplikát"
-                                  : "Nesedí součet položek"
-                              }
-                            />
-                          ) : null}
-                          <p className="font-medium">{r.vendor}</p>
-                          {isDuplicate ? (
-                            <Badge
-                              variant="outline"
-                              className="shrink-0 border-amber-600/40 text-amber-700"
-                            >
-                              duplikát
-                            </Badge>
-                          ) : null}
+                      <div className="flex min-w-0 items-center gap-2">
+                        {mismatch || isDuplicate ? (
+                          <AlertTriangle
+                            className={
+                              isDuplicate
+                                ? "size-4 shrink-0 self-center text-amber-600"
+                                : "size-4 shrink-0 self-center text-destructive"
+                            }
+                            aria-label={
+                              isDuplicate
+                                ? "Možný duplikát"
+                                : "Nesedí součet položek"
+                            }
+                          />
+                        ) : null}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{r.vendor}</p>
+                            {isDuplicate ? (
+                              <Badge
+                                variant="outline"
+                                className="shrink-0 border-amber-600/40 text-amber-700"
+                              >
+                                duplikát
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-muted-foreground">
+                            {when.date} · {when.time}
+                          </p>
                         </div>
-                        <p
-                          className={
-                            mismatch || isDuplicate
-                              ? "pl-6 text-muted-foreground"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          {when.date} · {when.time}
-                        </p>
                       </div>
                       <span className="font-medium">
                         {formatCzk(Number(r.total_amount))}
