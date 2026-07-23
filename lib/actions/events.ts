@@ -7,6 +7,10 @@ import {
   calculateSettlement,
   normalizeSettlementSummary,
 } from "@/lib/settlement";
+import {
+  createServiceClient,
+  storagePathFromPublicUrl,
+} from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json, ReceiptItem } from "@/lib/types/database";
 import { normalizeReceiptItems } from "@/lib/types/database";
@@ -510,6 +514,51 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
   revalidatePath("/dashboard");
   revalidatePath("/history");
   return { success: "Vyúčtování bylo uzavřeno." };
+}
+
+export async function deleteEventAction(eventId: string): Promise<ActionState> {
+  const { supabase, profile } = await requireProfile();
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, company_id, name")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event || event.company_id !== profile.company_id) {
+    return { error: "Akce nenalezena." };
+  }
+
+  const { data: receipts } = await supabase
+    .from("receipts")
+    .select("image_url")
+    .eq("event_id", eventId);
+
+  const paths = (receipts ?? [])
+    .map((r) => storagePathFromPublicUrl(r.image_url))
+    .filter((p): p is string => Boolean(p));
+
+  const admin = createServiceClient();
+  if (admin && paths.length > 0) {
+    for (let i = 0; i < paths.length; i += 100) {
+      await admin.storage.from("receipts").remove(paths.slice(i, i + 100));
+    }
+  }
+
+  const { error } = await supabase.from("events").delete().eq("id", eventId);
+  if (error) {
+    if (/permission denied|row-level security|RLS/i.test(error.message)) {
+      return {
+        error:
+          "Chybí oprávnění ke smazání akce. Spusťte SQL supabase/migration_delete_event.sql.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/history");
+  return { success: "Akce byla smazána." };
 }
 
 export async function reopenEventAction(eventId: string): Promise<ActionState> {

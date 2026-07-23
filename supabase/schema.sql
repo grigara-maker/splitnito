@@ -122,6 +122,11 @@ create policy "Members can update company events"
   on public.events for update
   using (company_id = public.current_company_id());
 
+create policy "Members can delete company events"
+  on public.events for delete
+  to authenticated
+  using (company_id = public.current_company_id());
+
 -- Receipts policies
 create policy "Members can view company receipts"
   on public.receipts for select

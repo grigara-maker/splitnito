@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { CloseEventButton } from "@/components/app/close-event-button";
+import { DeleteEventButton } from "@/components/app/delete-event-button";
 import { ReceiptsOverview } from "@/components/app/receipts-overview";
 import { RevenueForm } from "@/components/app/revenue-form";
 import { RevenuesOverview } from "@/components/app/revenues-overview";
@@ -152,9 +153,12 @@ export default async function EventPage({
             Přehled dokladů, tržeb a vyúčtování ve Splitnito.
           </p>
         </div>
-        {event.status === "active" ? (
-          <CloseEventButton eventId={event.id} />
-        ) : null}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+          {event.status === "active" ? (
+            <CloseEventButton eventId={event.id} />
+          ) : null}
+          <DeleteEventButton eventId={event.id} eventName={event.name} />
+        </div>
       </div>
 
       <section className="flex flex-col gap-4">
