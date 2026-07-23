@@ -194,6 +194,17 @@ export function ReceiptForm({
     onSaved?.();
   }, [pending, state.success, isEdit, onSaved, router]);
 
+  function removeItem(key: string) {
+    setItems((prev) => {
+      const next = prev.filter((row) => row.key !== key);
+      const remaining = next.length > 0 ? next : [emptyItem()];
+      const sum = itemsSum(draftsToItems(remaining));
+      setTotalAmount(sum > 0 ? String(sum) : "0");
+      setTotalManual(false);
+      return remaining;
+    });
+  }
+
   function updateItem(
     key: string,
     field: keyof Omit<DraftItem, "key">,
@@ -270,10 +281,17 @@ export function ReceiptForm({
         }
       }
       if (Array.isArray(json.items) && json.items.length > 0) {
-        setItems(toDraft(normalizeReceiptItems(json.items)));
+        const draftItems = toDraft(normalizeReceiptItems(json.items));
+        setItems(draftItems);
+        // Celková částka se drží souču položek — smazání/úprava je automaticky propsíše
         setTotalManual(false);
-      }
-      if (json.totalAmount != null) {
+        const sum = itemsSum(draftsToItems(draftItems));
+        if (sum > 0) {
+          setTotalAmount(String(sum));
+        } else if (json.totalAmount != null) {
+          setTotalAmount(String(json.totalAmount));
+        }
+      } else if (json.totalAmount != null) {
         setTotalAmount(String(json.totalAmount));
         setTotalManual(true);
       }
@@ -462,10 +480,8 @@ export function ReceiptForm({
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Odstranit položku"
-                  disabled={items.length === 1}
-                  onClick={() =>
-                    setItems((prev) => prev.filter((row) => row.key !== item.key))
-                  }
+                  disabled={items.length <= 1 && !items[0]?.name.trim()}
+                  onClick={() => removeItem(item.key)}
                 >
                   <Trash2 />
                 </Button>
