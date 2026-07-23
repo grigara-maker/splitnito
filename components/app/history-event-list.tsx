@@ -18,7 +18,7 @@ export function HistoryEventList({ events }: { events: HistoryItem[] }) {
           <LoadingLink
             href={`/events/${event.id}`}
             layout="block"
-            prefetch={false}
+            prefetch
             className="block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition hover:ring-primary/30"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
