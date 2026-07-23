@@ -29,7 +29,7 @@ export function SettlementView({
   companyName: string;
   eventName: string;
 }) {
-  const paymentMessage = `splitnito - ${companyName} - ${eventName}`;
+  const paymentMessage = `Splitnito - ${companyName} - ${eventName}`;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
