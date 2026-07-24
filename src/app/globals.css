@@ -127,7 +127,9 @@
   html {
     @apply font-sans;
   }
-  /* iOS/Safari: datetime-local má velkou intrinsic šířku a přetéká mimo viewport */
+  /* iOS/Safari: nativní date/time inputy nesmí přetéct layout */
+  input[type="date"],
+  input[type="time"],
   input[type="datetime-local"] {
     width: 100%;
     max-width: 100%;

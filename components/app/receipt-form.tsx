@@ -84,6 +84,16 @@ function toDatetimeLocalValue(d: Date): string {
   return toDatetimeLocalInPrague(d);
 }
 
+function splitDatetimeLocal(value: string): { date: string; time: string } {
+  const [date = "", time = ""] = value.split("T");
+  return { date, time: time.slice(0, 5) };
+}
+
+function joinDatetimeLocal(date: string, time: string): string {
+  if (!date) return "";
+  return `${date}T${time || "12:00"}`;
+}
+
 export function ReceiptForm({
   eventId,
   initialReceipt,
@@ -112,6 +122,15 @@ export function ReceiptForm({
     }
     return toDatetimeLocalValue(new Date());
   });
+  const purchaseParts = splitDatetimeLocal(purchasedAt);
+
+  function setPurchaseDate(date: string) {
+    setPurchasedAt(joinDatetimeLocal(date, purchaseParts.time));
+  }
+
+  function setPurchaseTime(time: string) {
+    setPurchasedAt(joinDatetimeLocal(purchaseParts.date, time));
+  }
   const [items, setItems] = useState<DraftItem[]>(() =>
     toDraft(normalizeReceiptItems(initialReceipt?.items))
   );
@@ -323,7 +342,7 @@ export function ReceiptForm({
       </div>
 
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2 sm:col-span-2">
           <Label htmlFor="vendor">Dodavatel</Label>
           <Input
             id="vendor"
@@ -335,17 +354,28 @@ export function ReceiptForm({
           />
         </div>
         <div className="flex min-w-0 flex-col gap-2">
-          <Label htmlFor="purchasedAt">Datum a čas nákupu</Label>
+          <Label htmlFor="purchaseDate">Datum nákupu</Label>
           <Input
-            id="purchasedAt"
-            name="purchasedAt"
-            type="datetime-local"
+            id="purchaseDate"
+            type="date"
             required
-            value={purchasedAt}
-            onChange={(e) => setPurchasedAt(e.target.value)}
-            className="w-full min-w-0 max-w-full box-border"
+            value={purchaseParts.date}
+            onChange={(e) => setPurchaseDate(e.target.value)}
+            className="w-full min-w-0 max-w-full"
           />
         </div>
+        <div className="flex min-w-0 flex-col gap-2">
+          <Label htmlFor="purchaseTime">Čas nákupu</Label>
+          <Input
+            id="purchaseTime"
+            type="time"
+            required
+            value={purchaseParts.time}
+            onChange={(e) => setPurchaseTime(e.target.value)}
+            className="w-full min-w-0 max-w-full"
+          />
+        </div>
+        <input type="hidden" name="purchasedAt" value={purchasedAt} />
       </div>
 
       <div className="flex flex-col gap-2">
