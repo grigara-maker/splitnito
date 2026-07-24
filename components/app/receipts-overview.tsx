@@ -16,6 +16,7 @@ import {
   getReceiptImageUrlAction,
 } from "@/lib/actions/events";
 import { formatCzk } from "@/lib/iban";
+import { formatDateTimeInPrague } from "@/lib/datetime-prague";
 import {
   amountsMismatch,
   itemsSum,
@@ -63,18 +64,7 @@ function profileName(profiles: ReceiptRow["profiles"]): string {
 }
 
 function formatDateTime(iso: string) {
-  const d = new Date(iso);
-  return {
-    date: d.toLocaleDateString("cs-CZ", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
-    time: d.toLocaleTimeString("cs-CZ", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  };
+  return formatDateTimeInPrague(iso);
 }
 
 export function ReceiptsOverview({

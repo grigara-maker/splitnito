@@ -7,6 +7,7 @@ import {
   calculateSettlement,
   normalizeSettlementSummary,
 } from "@/lib/settlement";
+import { datetimeLocalPragueToIso } from "@/lib/datetime-prague";
 import {
   createServiceClient,
   storagePathFromPublicUrl,
@@ -99,11 +100,11 @@ function parseReceiptFields(formData: FormData) {
 
   let purchasedAt: string | null = null;
   if (purchasedAtRaw) {
-    const d = new Date(purchasedAtRaw);
-    if (Number.isNaN(d.getTime())) {
+    const iso = datetimeLocalPragueToIso(purchasedAtRaw);
+    if (!iso) {
       return { error: "Neplatné datum nákupu." as const };
     }
-    purchasedAt = d.toISOString();
+    purchasedAt = iso;
   }
 
   return { vendor, totalAmount, items, imageUrl, purchasedAt };

@@ -20,6 +20,10 @@ import {
   type ArchiveReceiptDetail,
 } from "@/lib/actions/archive";
 import { getReceiptImageUrlAction } from "@/lib/actions/events";
+import {
+  formatDateTimeInPrague,
+  formatInPrague,
+} from "@/lib/datetime-prague";
 import { formatCzk } from "@/lib/iban";
 import {
   amountsMismatch,
@@ -39,8 +43,12 @@ import { cn } from "@/lib/utils";
 
 function receiptDayKey(r: ArchiveReceipt): string {
   const iso = r.purchased_at ?? r.created_at;
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
 }
 
 function formatDayLabel(key: string): string {
@@ -55,7 +63,7 @@ function formatDayLabel(key: string): string {
 
 function formatReceiptWhen(r: ArchiveReceipt): string {
   const iso = r.purchased_at ?? r.created_at;
-  return new Date(iso).toLocaleDateString("cs-CZ", {
+  return formatInPrague(iso, {
     day: "numeric",
     month: "numeric",
     year: "numeric",
@@ -63,18 +71,7 @@ function formatReceiptWhen(r: ArchiveReceipt): string {
 }
 
 function formatDateTime(iso: string) {
-  const d = new Date(iso);
-  return {
-    date: d.toLocaleDateString("cs-CZ", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
-    time: d.toLocaleTimeString("cs-CZ", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  };
+  return formatDateTimeInPrague(iso);
 }
 
 type Group = {

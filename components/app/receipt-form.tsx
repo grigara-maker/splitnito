@@ -9,6 +9,7 @@ import {
   updateReceiptAction,
   type ActionState,
 } from "@/lib/actions/events";
+import { toDatetimeLocalInPrague } from "@/lib/datetime-prague";
 import {
   findMatchingReceipt,
   type ReceiptDuplicateKey,
@@ -80,8 +81,7 @@ function draftsToItems(items: DraftItem[]): ReceiptItem[] {
 }
 
 function toDatetimeLocalValue(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return toDatetimeLocalInPrague(d);
 }
 
 export function ReceiptForm({
@@ -107,8 +107,8 @@ export function ReceiptForm({
   const [totalManual, setTotalManual] = useState(Boolean(initialReceipt));
   const [purchasedAt, setPurchasedAt] = useState(() => {
     if (initialReceipt?.purchasedAt) {
-      const d = new Date(initialReceipt.purchasedAt);
-      if (!Number.isNaN(d.getTime())) return toDatetimeLocalValue(d);
+      const v = toDatetimeLocalInPrague(initialReceipt.purchasedAt);
+      if (v) return v;
     }
     return toDatetimeLocalValue(new Date());
   });
@@ -253,10 +253,8 @@ export function ReceiptForm({
 
       if (json.vendor) setVendor(json.vendor);
       if (json.purchasedAt) {
-        const d = new Date(json.purchasedAt);
-        if (!Number.isNaN(d.getTime())) {
-          setPurchasedAt(toDatetimeLocalValue(d));
-        }
+        const v = toDatetimeLocalInPrague(json.purchasedAt);
+        if (v) setPurchasedAt(v);
       }
       if (Array.isArray(json.items) && json.items.length > 0) {
         const draftItems = toDraft(normalizeReceiptItems(json.items));

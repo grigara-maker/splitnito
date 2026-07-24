@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { parseReceiptPurchasedAt } from "@/lib/datetime-prague";
 import { reconcileOcrItemsWithTotal } from "@/lib/ocr-reconcile";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeReceiptItems } from "@/lib/types/database";
@@ -116,7 +117,9 @@ Marketplace / TEMU / table invoices (Unit price | Qty | Amount):
 - After filling all product lines, VERIFY: sum(totalPrice) must match Order total / Grand total. If not, flip ambiguous lines between (A) and (B) until it fits.
 
 Other rules:
-- purchasedAt = purchase/order date-time on the document, ISO-8601. Date only → noon. Unreadable → null.
+- purchasedAt = exact date and time printed on the receipt (Czech wall clock), format YYYY-MM-DDTHH:mm:ss with NO timezone suffix and NO "Z".
+- Do NOT convert to UTC. If the receipt shows 15:30, return "...T15:30:00" (not 13:30Z).
+- Date only → use T12:00:00. Unreadable → null.
 - quantity default 1.
 - Decimal separator: dot.
 - Do not invent values. Unreadable → null / [].`;
@@ -242,10 +245,7 @@ Other rules:
 
   let purchasedAt: string | null = null;
   if (typeof parsed.purchasedAt === "string" && parsed.purchasedAt.trim()) {
-    const d = new Date(parsed.purchasedAt.trim());
-    if (!Number.isNaN(d.getTime())) {
-      purchasedAt = d.toISOString();
-    }
+    purchasedAt = parseReceiptPurchasedAt(parsed.purchasedAt);
   }
 
   return NextResponse.json({
