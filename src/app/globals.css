@@ -127,13 +127,26 @@
   html {
     @apply font-sans;
   }
-  /* iOS/Safari: nativní date/time inputy nesmí přetéct layout */
-  input[type="date"],
-  input[type="time"],
-  input[type="datetime-local"] {
+  /* iOS Safari: nativní date/time ignorují width, dokud není appearance vypnuté */
+  input.receipt-date-input[type="date"],
+  input.receipt-date-input[type="time"],
+  input[type="date"].receipt-date-input,
+  input[type="time"].receipt-date-input {
+    display: block;
     width: 100%;
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input.receipt-date-input::-webkit-date-and-time-value {
+    text-align: left;
+    min-width: 0;
+  }
+
+  input.receipt-date-input::-webkit-calendar-picker-indicator {
+    margin-left: auto;
   }
 }

@@ -341,42 +341,42 @@ export function ReceiptForm({
         ) : null}
       </div>
 
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-2 sm:col-span-2">
-          <Label htmlFor="vendor">Dodavatel</Label>
-          <Input
-            id="vendor"
-            name="vendor"
-            required
-            value={vendor}
-            onChange={(e) => setVendor(e.target.value)}
-            placeholder="Albert"
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-2">
-          <Label htmlFor="purchaseDate">Datum nákupu</Label>
-          <Input
-            id="purchaseDate"
-            type="date"
-            required
-            value={purchaseParts.date}
-            onChange={(e) => setPurchaseDate(e.target.value)}
-            className="w-full min-w-0 max-w-full"
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-2">
-          <Label htmlFor="purchaseTime">Čas nákupu</Label>
-          <Input
-            id="purchaseTime"
-            type="time"
-            required
-            value={purchaseParts.time}
-            onChange={(e) => setPurchaseTime(e.target.value)}
-            className="w-full min-w-0 max-w-full"
-          />
-        </div>
-        <input type="hidden" name="purchasedAt" value={purchasedAt} />
+      <div className="flex min-w-0 flex-col gap-2">
+        <Label htmlFor="vendor">Dodavatel</Label>
+        <Input
+          id="vendor"
+          name="vendor"
+          required
+          value={vendor}
+          onChange={(e) => setVendor(e.target.value)}
+          placeholder="Albert"
+        />
       </div>
+
+      <div className="flex min-w-0 flex-col gap-2">
+        <Label htmlFor="purchaseDate">Datum nákupu</Label>
+        <Input
+          id="purchaseDate"
+          type="date"
+          required
+          value={purchaseParts.date}
+          onChange={(e) => setPurchaseDate(e.target.value)}
+          className="receipt-date-input"
+        />
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-2">
+        <Label htmlFor="purchaseTime">Čas nákupu</Label>
+        <Input
+          id="purchaseTime"
+          type="time"
+          required
+          value={purchaseParts.time}
+          onChange={(e) => setPurchaseTime(e.target.value)}
+          className="receipt-date-input"
+        />
+      </div>
+      <input type="hidden" name="purchasedAt" value={purchasedAt} />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="totalAmount">Celková částka (Kč)</Label>
