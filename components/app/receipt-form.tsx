@@ -280,7 +280,7 @@ export function ReceiptForm({
   }
 
   return (
-    <form ref={formRef} action={formAction} className="flex flex-col gap-4">
+    <form ref={formRef} action={formAction} className="flex min-w-0 flex-col gap-4">
       <input type="hidden" name="eventId" value={eventId} />
       {initialReceipt ? (
         <input type="hidden" name="receiptId" value={initialReceipt.id} />
