@@ -11,6 +11,10 @@ import {
 } from "@/lib/actions/events";
 import { toDatetimeLocalInPrague } from "@/lib/datetime-prague";
 import {
+  compressImageForOcr,
+  compressImageForUpload,
+} from "@/lib/image-compress";
+import {
   findMatchingReceipt,
   type ReceiptDuplicateKey,
 } from "@/lib/receipt-duplicates";
@@ -239,30 +243,45 @@ export function ReceiptForm({
     setOcrLoading(true);
     try {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+
+      // Komprese + auth paralelně; OCR běží zároveň s uploadem do Storage
+      const [ocrFile, uploadFile, userResult] = await Promise.all([
+        compressImageForOcr(file),
+        compressImageForUpload(file),
+        supabase.auth.getUser(),
+      ]);
+
+      const user = userResult.data.user;
       if (!user) throw new Error("Nejste přihlášeni.");
 
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-      const { error: uploadErrorDb } = await supabase.storage
-        .from("receipts")
-        .upload(path, file, { upsert: false });
+      const ocrBody = new FormData();
+      ocrBody.append("file", ocrFile);
 
-      if (uploadErrorDb) throw new Error(uploadErrorDb.message);
+      const ext =
+        uploadFile.name.split(".").pop() ||
+        (uploadFile.type === "image/jpeg" ? "jpg" : "bin");
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+
+      const [uploadResult, ocrRes] = await Promise.all([
+        supabase.storage.from("receipts").upload(path, uploadFile, {
+          upsert: false,
+          contentType: uploadFile.type || undefined,
+        }),
+        fetch("/api/ocr", { method: "POST", body: ocrBody }),
+      ]);
+
+      if (uploadResult.error) {
+        throw new Error(uploadResult.error.message);
+      }
 
       const {
         data: { publicUrl },
       } = supabase.storage.from("receipts").getPublicUrl(path);
       setImageUrl(publicUrl);
 
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/ocr", { method: "POST", body: formData });
-      const json = await res.json();
+      const json = await ocrRes.json();
 
-      if (!res.ok) {
+      if (!ocrRes.ok) {
         setOcrWarning(
           json.error ??
             "OCR se nepodařilo. Doklad můžete vyplnit ručně a uložit."
@@ -278,7 +297,6 @@ export function ReceiptForm({
       if (Array.isArray(json.items) && json.items.length > 0) {
         const draftItems = toDraft(normalizeReceiptItems(json.items));
         setItems(draftItems);
-        // Celková částka se drží souču položek — smazání/úprava je automaticky propsíše
         setTotalManual(false);
         const sum = itemsSum(draftsToItems(draftItems));
         if (sum > 0) {

@@ -31,11 +31,9 @@ type GeminiResponse = {
  */
 const GEMINI_MODELS = [
   process.env.GEMINI_OCR_MODEL?.trim(),
+  // Nejdřív nejrychlejší lite; flash jen jako fallback při 429/404
   "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
-  "gemini-3.1-flash-lite",
-  "gemini-3-flash",
-  "gemini-3.6-flash",
 ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
 export async function POST(request: Request) {
@@ -124,7 +122,13 @@ Other rules:
 - Decimal separator: dot.
 - Do not invent values. Unreadable → null / [].`;
 
-  const requestBody = {
+  const baseGenerationConfig = {
+    temperature: 0.05,
+    responseMimeType: "application/json" as const,
+    maxOutputTokens: 4096,
+  };
+
+  const makeBody = (withThinkingOff: boolean) => ({
     contents: [
       {
         role: "user",
@@ -140,10 +144,10 @@ Other rules:
       },
     ],
     generationConfig: {
-      temperature: 0.05,
-      responseMimeType: "application/json",
+      ...baseGenerationConfig,
+      ...(withThinkingOff ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
     },
-  };
+  });
 
   let lastStatus = 0;
   let lastText = "";
@@ -151,25 +155,38 @@ Other rules:
 
   for (const model of GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    });
 
-    lastStatus = response.status;
-    lastText = await response.text();
+    for (const withThinkingOff of [true, false]) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(makeBody(withThinkingOff)),
+      });
 
-    if (response.ok) {
-      try {
-        data = JSON.parse(lastText) as GeminiResponse;
-      } catch {
-        data = null;
+      lastStatus = response.status;
+      lastText = await response.text();
+
+      if (response.ok) {
+        try {
+          data = JSON.parse(lastText) as GeminiResponse;
+        } catch {
+          data = null;
+        }
+        if (data) break;
       }
-      if (data) break;
+
+      // thinkingConfig některé modely neznají → zkus bez něj
+      if (
+        withThinkingOff &&
+        (response.status === 400 || response.status === 404)
+      ) {
+        continue;
+      }
+      break;
     }
 
-    if (response.status !== 429 && response.status !== 404) {
+    if (data) break;
+    if (lastStatus !== 429 && lastStatus !== 404) {
       break;
     }
   }
