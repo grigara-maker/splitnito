@@ -17,6 +17,10 @@ export type ArchiveReceipt = {
   event_name: string;
 };
 
+export type ArchiveReceiptDetail = ArchiveReceipt & {
+  items: unknown;
+};
+
 export type ArchiveQuery = {
   query?: string;
   groupBy: ArchiveGroupBy;
@@ -198,5 +202,60 @@ export async function getArchiveReceiptsAction(
   return {
     rows: filtered,
     hasMore: (data ?? []).length >= limit,
+  };
+}
+
+/** Detail dokladu (položky) — až při otevření dialogu v archivu. */
+export async function getArchiveReceiptDetailAction(
+  receiptId: string
+): Promise<{ receipt: ArchiveReceiptDetail | null; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { receipt: null, error: "Nejste přihlášeni." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) return { receipt: null, error: "Profil nenalezen." };
+
+  const { data: receipt, error } = await supabase
+    .from("receipts")
+    .select(
+      "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, event_id, items"
+    )
+    .eq("id", receiptId)
+    .maybeSingle();
+
+  if (error) return { receipt: null, error: error.message };
+  if (!receipt) return { receipt: null, error: "Doklad nenalezen." };
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, name, company_id")
+    .eq("id", receipt.event_id)
+    .maybeSingle();
+
+  if (!event || event.company_id !== profile.company_id) {
+    return { receipt: null, error: "Nemáte přístup k tomuto dokladu." };
+  }
+
+  return {
+    receipt: {
+      id: receipt.id,
+      vendor: receipt.vendor,
+      total_amount: Number(receipt.total_amount),
+      created_at: receipt.created_at,
+      purchased_at: receipt.purchased_at,
+      user_id: receipt.user_id,
+      uploader_name: receipt.uploader_name,
+      event_id: receipt.event_id,
+      event_name: event.name,
+      items: receipt.items,
+    },
   };
 }
