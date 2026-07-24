@@ -26,15 +26,16 @@ type GeminiResponse = {
 
 /**
  * Pořadí OCR modelů (první = preferovaný).
+ * Jen Gemini 3.x — 2.5 Flash(-Lite) už Google pro nové API klíče neposkytuje (404).
  * Při 429 / 404 / chybě / prázdné odpovědi → vždy další v seznamu.
  * Override: GEMINI_OCR_MODEL (zkusí se jako první).
  */
 const GEMINI_MODELS = [
   process.env.GEMINI_OCR_MODEL?.trim(),
+  "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",
 ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
 function isModelUnavailable(status: number, body: string): boolean {
@@ -147,7 +148,9 @@ Other rules:
     maxOutputTokens: 4096,
   };
 
-  const makeBody = (withThinkingOff: boolean) => ({
+  type ThinkingMode = "minimal" | "none";
+
+  const makeBody = (thinking: ThinkingMode) => ({
     contents: [
       {
         role: "user",
@@ -164,7 +167,10 @@ Other rules:
     ],
     generationConfig: {
       ...baseGenerationConfig,
-      ...(withThinkingOff ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      // Gemini 3.x: thinkingLevel (thinkingBudget: 0 už není spolehlivé)
+      ...(thinking === "minimal"
+        ? { thinkingConfig: { thinkingLevel: "minimal" } }
+        : {}),
     },
   });
 
@@ -173,24 +179,24 @@ Other rules:
   let data: GeminiResponse | null = null;
   let usedModel: string | null = null;
   const attempted: string[] = [];
+  const attemptErrors: string[] = [];
 
   for (const model of GEMINI_MODELS) {
     attempted.push(model);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    // 2.5 Flash: thinking vypnout (rychlejší). 3.5: nejdřív bez / s vypnutím.
-    const thinkingAttempts =
-      model.startsWith("gemini-2.5") || model.startsWith("gemini-3")
-        ? [true, false]
-        : [false];
+    // 3.x: nejdřív minimal thinking (rychlé OCR), pak bez thinkingConfig
+    const thinkingAttempts: ThinkingMode[] = model.startsWith("gemini-3")
+      ? ["minimal", "none"]
+      : ["none"];
 
     let modelFailed = false;
 
-    for (const withThinkingOff of thinkingAttempts) {
+    for (const thinking of thinkingAttempts) {
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(makeBody(withThinkingOff)),
+        body: JSON.stringify(makeBody(thinking)),
       });
 
       lastStatus = response.status;
@@ -211,20 +217,22 @@ Other rules:
         }
         data = null;
         // Prázdná odpověď → zkus další thinking variantu / model
-        if (withThinkingOff && thinkingAttempts.length > 1) continue;
+        if (thinking === "minimal" && thinkingAttempts.length > 1) continue;
+        attemptErrors.push(`${model}: prázdná odpověď`);
         modelFailed = true;
         break;
       }
 
       // Model neexistuje / není dostupný → rovnou další model
       if (isModelUnavailable(response.status, lastText)) {
+        attemptErrors.push(`${model}: ${lastStatus} nedostupný`);
         modelFailed = true;
         break;
       }
 
       // thinkingConfig nepodporovaný → zkus bez něj
       if (
-        withThinkingOff &&
+        thinking === "minimal" &&
         response.status === 400 &&
         /thinking|thinkingConfig|thinkingBudget|thinkingLevel/i.test(lastText)
       ) {
@@ -233,10 +241,12 @@ Other rules:
 
       // Quota / jiná chyba → další model
       if (shouldTryNextModel(response.status, lastText)) {
+        attemptErrors.push(`${model}: ${lastStatus}`);
         modelFailed = true;
         break;
       }
 
+      attemptErrors.push(`${model}: ${lastStatus}`);
       modelFailed = true;
       break;
     }
@@ -247,21 +257,23 @@ Other rules:
   }
 
   if (!data || !usedModel) {
+    const tried = attempted.join(", ");
     if (lastStatus === 429) {
       return NextResponse.json(
         {
-          error:
-            "OCR: všechny Gemini modely odmítly požadavek (limit / kvóta). Zkuste to za chvíli, nebo doklad vyplňte ručně.",
+          error: `OCR: všechny Gemini modely odmítly požadavek (limit / kvóta). Zkoušeno: ${tried}. Zkuste to za chvíli, nebo doklad vyplňte ručně.`,
           code: "QUOTA_EXCEEDED",
           attempted,
+          attemptErrors,
         },
         { status: 429 }
       );
     }
     return NextResponse.json(
       {
-        error: `Gemini API chyba: ${lastStatus} ${lastText.slice(0, 280)}`,
+        error: `Gemini API chyba (zkoušeno: ${tried}): ${lastStatus} ${lastText.slice(0, 220)}`,
         attempted,
+        attemptErrors,
       },
       { status: 502 }
     );
