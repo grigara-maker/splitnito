@@ -3,10 +3,11 @@
 import { usePathname } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import {
-  Archive,
   Building2,
   CalendarDays,
+  History,
   LogOut,
+  Receipt,
   UserRound,
 } from "lucide-react";
 
@@ -78,6 +79,21 @@ export function AppNav({
           </LoadingLink>
 
           <LoadingLink
+            href="/archive"
+            spinner="sm"
+            prefetch={false}
+            className={cn(
+              buttonVariants({
+                variant: pathname.startsWith("/archive") ? "secondary" : "ghost",
+                size: "sm",
+              })
+            )}
+          >
+            <Receipt />
+            <span className="hidden sm:inline">Doklady</span>
+          </LoadingLink>
+
+          <LoadingLink
             href="/history"
             spinner="sm"
             className={cn(
@@ -87,7 +103,7 @@ export function AppNav({
               })
             )}
           >
-            <Archive />
+            <History />
             <span className="hidden sm:inline">Historie</span>
           </LoadingLink>
 
