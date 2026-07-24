@@ -322,8 +322,8 @@ export function ReceiptForm({
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <Label htmlFor="vendor">Dodavatel</Label>
           <Input
             id="vendor"
@@ -334,7 +334,7 @@ export function ReceiptForm({
             placeholder="Albert"
           />
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <Label htmlFor="purchasedAt">Datum a čas nákupu</Label>
           <Input
             id="purchasedAt"
@@ -343,6 +343,7 @@ export function ReceiptForm({
             required
             value={purchasedAt}
             onChange={(e) => setPurchasedAt(e.target.value)}
+            className="w-full min-w-0 max-w-full box-border"
           />
         </div>
       </div>

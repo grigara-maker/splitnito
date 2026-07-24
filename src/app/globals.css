@@ -127,4 +127,11 @@
   html {
     @apply font-sans;
   }
+  /* iOS/Safari: datetime-local má velkou intrinsic šířku a přetéká mimo viewport */
+  input[type="datetime-local"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
 }
