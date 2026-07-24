@@ -25,16 +25,35 @@ type GeminiResponse = {
 };
 
 /**
- * Free-tier limity (Google AI Studio): gemini-2.0-flash má často 0/0 → 429.
- * Preferuj 2.5 / 3.x Flash Lite, které mají reálnou RPD kvótu.
- * Override: GEMINI_OCR_MODEL ve Vercelu.
+ * Pořadí OCR modelů (první = preferovaný).
+ * Při 429 / 404 / chybě / prázdné odpovědi → vždy další v seznamu.
+ * Override: GEMINI_OCR_MODEL (zkusí se jako první).
  */
 const GEMINI_MODELS = [
   process.env.GEMINI_OCR_MODEL?.trim(),
-  // Nejdřív nejrychlejší lite; flash jen jako fallback při 429/404
-  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
   "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
 ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
+
+function isModelUnavailable(status: number, body: string): boolean {
+  if (status === 404) return true;
+  return /no longer available|not found|not supported for|is not found/i.test(
+    body
+  );
+}
+
+function shouldTryNextModel(status: number, body: string): boolean {
+  // Quota, nedostupný model, server/transient chyby → další model
+  if ([429, 404, 500, 502, 503, 504].includes(status)) return true;
+  if (isModelUnavailable(status, body)) return true;
+  if (status === 400 && /thinking|thinkingConfig|thinkingBudget|thinkingLevel/i.test(body)) {
+    return false; // řeší se retry bez thinking na stejném modelu
+  }
+  // Jakákoli jiná chyba API — zkus další model (limity, region, …)
+  return status >= 400;
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -152,11 +171,22 @@ Other rules:
   let lastStatus = 0;
   let lastText = "";
   let data: GeminiResponse | null = null;
+  let usedModel: string | null = null;
+  const attempted: string[] = [];
 
   for (const model of GEMINI_MODELS) {
+    attempted.push(model);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    for (const withThinkingOff of [true, false]) {
+    // 2.5 Flash: thinking vypnout (rychlejší). 3.5: nejdřív bez / s vypnutím.
+    const thinkingAttempts =
+      model.startsWith("gemini-2.5") || model.startsWith("gemini-3")
+        ? [true, false]
+        : [false];
+
+    let modelFailed = false;
+
+    for (const withThinkingOff of thinkingAttempts) {
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,39 +202,66 @@ Other rules:
         } catch {
           data = null;
         }
-        if (data) break;
+        const hasText = Boolean(
+          data?.candidates?.[0]?.content?.parts?.some((p) => p.text?.trim())
+        );
+        if (data && hasText) {
+          usedModel = model;
+          break;
+        }
+        data = null;
+        // Prázdná odpověď → zkus další thinking variantu / model
+        if (withThinkingOff && thinkingAttempts.length > 1) continue;
+        modelFailed = true;
+        break;
       }
 
-      // thinkingConfig některé modely neznají → zkus bez něj
+      // Model neexistuje / není dostupný → rovnou další model
+      if (isModelUnavailable(response.status, lastText)) {
+        modelFailed = true;
+        break;
+      }
+
+      // thinkingConfig nepodporovaný → zkus bez něj
       if (
         withThinkingOff &&
-        (response.status === 400 || response.status === 404)
+        response.status === 400 &&
+        /thinking|thinkingConfig|thinkingBudget|thinkingLevel/i.test(lastText)
       ) {
         continue;
       }
+
+      // Quota / jiná chyba → další model
+      if (shouldTryNextModel(response.status, lastText)) {
+        modelFailed = true;
+        break;
+      }
+
+      modelFailed = true;
       break;
     }
 
-    if (data) break;
-    if (lastStatus !== 429 && lastStatus !== 404) {
-      break;
-    }
+    if (data && usedModel) break;
+    if (!modelFailed && data) break;
+    // vždy zkus další model, dokud něco neuspěje
   }
 
-  if (!data) {
+  if (!data || !usedModel) {
     if (lastStatus === 429) {
       return NextResponse.json(
         {
           error:
-            "OCR: Gemini odmítlo požadavek (429). U free tieru má model gemini-2.0-flash často limit 0 — aplikace teď používá gemini-2.5-flash-lite. Zkontrolujte GEMINI_API_KEY a model v projektu Splitnito, případně nastavte GEMINI_OCR_MODEL=gemini-2.5-flash-lite. Mezitím můžete doklad vyplnit ručně.",
+            "OCR: všechny Gemini modely odmítly požadavek (limit / kvóta). Zkuste to za chvíli, nebo doklad vyplňte ručně.",
           code: "QUOTA_EXCEEDED",
+          attempted,
         },
         { status: 429 }
       );
     }
     return NextResponse.json(
       {
-        error: `Gemini API chyba: ${lastStatus} ${lastText.slice(0, 200)}`,
+        error: `Gemini API chyba: ${lastStatus} ${lastText.slice(0, 280)}`,
+        attempted,
       },
       { status: 502 }
     );
