@@ -127,26 +127,29 @@
   html {
     @apply font-sans;
   }
-  /* iOS Safari: nativní date/time ignorují width, dokud není appearance vypnuté */
-  input.receipt-date-input[type="date"],
-  input.receipt-date-input[type="time"],
-  input[type="date"].receipt-date-input,
-  input[type="time"].receipt-date-input {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+  /* iOS Safari: nativní date/time ignorují width bez vypnutí appearance */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  [data-slot="input"][type="date"],
+  [data-slot="input"][type="time"] {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
     -webkit-appearance: none;
     appearance: none;
   }
 
-  input.receipt-date-input::-webkit-date-and-time-value {
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value {
     text-align: left;
     min-width: 0;
   }
 
-  input.receipt-date-input::-webkit-calendar-picker-indicator {
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
     margin-left: auto;
   }
 }
