@@ -170,8 +170,7 @@ function TransferCard({
   const isDebtor = transfer.fromUserId === currentUserId;
   const isCreditor = transfer.toUserId === currentUserId;
   const confirmed = transfer.status === "confirmed";
-  const showQr =
-    !confirmed && (isDebtor || isCreditor) && Boolean(transfer.toIban);
+  const canShowQr = !confirmed && isDebtor && Boolean(transfer.toIban);
 
   return (
     <li className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
@@ -188,41 +187,35 @@ function TransferCard({
         <p className="mt-3 text-sm text-muted-foreground">
           Platba byla potvrzena.
         </p>
-      ) : showQr ? (
-        <>
+      ) : isDebtor ? (
+        canShowQr ? (
           <PaymentQr
             iban={transfer.toIban!}
             amount={transfer.amount}
             recipientName={transfer.toName}
             message={paymentMessage}
           />
-          {isCreditor ? (
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Po přijetí platby potvrďte zaplacení.
-              </p>
-              <Button
-                loading={pending}
-                onClick={() => {
-                  startTransition(async () => {
-                    const result = await confirmPaymentAction(
-                      eventId,
-                      transfer.id
-                    );
-                    if (result.error) setError(result.error);
-                    else onChanged();
-                  });
-                }}
-              >
-                Potvrdit zaplacení
-              </Button>
-            </div>
-          ) : null}
-        </>
-      ) : isDebtor || isCreditor ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Příjemce nemá vyplněný IBAN — doplňte ho v profilu.
-        </p>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Příjemce nemá vyplněný IBAN — požádejte ho o doplnění v profilu.
+          </p>
+        )
+      ) : isCreditor ? (
+        <div className="mt-3">
+          <Button
+            className="w-full sm:w-auto"
+            loading={pending}
+            onClick={() => {
+              startTransition(async () => {
+                const result = await confirmPaymentAction(eventId, transfer.id);
+                if (result.error) setError(result.error);
+                else onChanged();
+              });
+            }}
+          >
+            Potvrdit zaplacení
+          </Button>
+        </div>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">
           Platba mezi ostatními členy.
