@@ -190,14 +190,6 @@ export function ReceiptArchive() {
   );
 
   useEffect(() => {
-    if (initialLoading || isPending || groups.length === 0) return;
-    setOpenGroups((prev) => {
-      if (Object.keys(prev).length > 0) return prev;
-      return { [groups[0].key]: true };
-    });
-  }, [initialLoading, isPending, groups]);
-
-  useEffect(() => {
     if (!selectedId) {
       setDetail(null);
       setDetailError(null);
