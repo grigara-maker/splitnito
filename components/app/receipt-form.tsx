@@ -11,8 +11,7 @@ import {
 } from "@/lib/actions/events";
 import { toDatetimeLocalInPrague } from "@/lib/datetime-prague";
 import {
-  compressImageForOcr,
-  compressImageForUpload,
+  compressImagesForReceipt,
 } from "@/lib/image-compress";
 import {
   findMatchingReceipt,
@@ -244,12 +243,12 @@ export function ReceiptForm({
     try {
       const supabase = createClient();
 
-      // Komprese + auth paralelně; OCR běží zároveň s uploadem do Storage
-      const [ocrFile, uploadFile, userResult] = await Promise.all([
-        compressImageForOcr(file),
-        compressImageForUpload(file),
+      // Jedno dekódování → OCR + upload; auth paralelně
+      const [compressed, userResult] = await Promise.all([
+        compressImagesForReceipt(file),
         supabase.auth.getUser(),
       ]);
+      const { ocr: ocrFile, upload: uploadFile } = compressed;
 
       const user = userResult.data.user;
       if (!user) throw new Error("Nejste přihlášeni.");

@@ -26,16 +26,16 @@ type GeminiResponse = {
 
 /**
  * Pořadí OCR modelů (první = preferovaný).
- * Jen Gemini 3.x — 2.5 Flash(-Lite) už Google pro nové API klíče neposkytuje (404).
- * Při 429 / 404 / chybě / prázdné odpovědi → vždy další v seznamu.
+ * Flash-Lite první = nejrychlejší pro extrakci z dokladů (~350 tok/s).
+ * Těžší Flash jen jako fallback při chybě/limitu.
  * Override: GEMINI_OCR_MODEL (zkusí se jako první).
  */
 const GEMINI_MODELS = [
   process.env.GEMINI_OCR_MODEL?.trim(),
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
 ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
 function isModelUnavailable(status: number, body: string): boolean {
@@ -58,15 +58,19 @@ function shouldTryNextModel(status: number, body: string): boolean {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const apiKey = process.env.GEMINI_API_KEY;
 
+  // Auth + formData paralelně (ušetří ~50–150 ms)
+  const [userResult, formData] = await Promise.all([
+    supabase.auth.getUser(),
+    request.formData(),
+  ]);
+
+  const user = userResult.data.user;
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       {
@@ -77,7 +81,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
@@ -95,57 +98,20 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = buffer.toString("base64");
 
-  const prompt = `You are reading a Czech or international receipt / invoice / order summary (incl. TEMU, Amazon, eshop PDFs).
-Extract structured data and respond ONLY with JSON matching this schema:
-{
-  "vendor": string | null,
-  "totalAmount": number | null,
-  "purchasedAt": string | null,
-  "items": [
-    {
-      "name": string,
-      "quantity": number,
-      "unitPrice": number,
-      "totalPrice": number
-    }
-  ]
-}
+  const prompt = `Extract receipt/invoice data (CZ or international, incl. TEMU/Amazon). Reply ONLY with JSON:
+{"vendor":string|null,"totalAmount":number|null,"purchasedAt":string|null,"items":[{"name":string,"quantity":number,"unitPrice":number,"totalPrice":number}]}
 
-CRITICAL — amounts INCLUDING VAT (DPH / tax):
-- Prefer "Cena s DPH", "Celkem s DPH", "Celkem k úhradě", "Order total", "Grand total", "Total paid".
-- Never prefer net / without VAT when a with-VAT total exists.
-- Item prices must be WITH VAT when both are shown.
-
-CRITICAL — unit price vs line total (MOST COMMON ERROR):
-A printed number next to quantity can mean EITHER:
-  A) PRICE PER PIECE (unitPrice): quantity=2, shown=250 → unitPrice=250, totalPrice=500
-  B) LINE TOTAL for all pieces: quantity=2, shown=250 → unitPrice=125, totalPrice=250
-
-YOU MUST DECIDE USING THE INVOICE GRAND TOTAL (totalAmount):
-1. Read totalAmount first (final amount customer pays).
-2. Build items so that sum(items.totalPrice) ≈ totalAmount (within ~1–2 currency units).
-3. If interpretation A makes the items sum far from totalAmount and B matches, use B — and vice versa.
-4. NEVER invent unitPrice by dividing a unit-price column by quantity.
-5. NEVER set totalPrice = unitPrice when quantity > 1 (unless the document truly shows only one price that is the line total — then unitPrice = that / quantity).
-
-Marketplace / TEMU / table invoices (Unit price | Qty | Amount):
-- If a column is labeled Unit price / Price / Cena / Cena/ks → that number is unitPrice; totalPrice = unitPrice × quantity.
-- If a column is labeled Amount / Item total / Součet / Celkem za položku → that number is totalPrice; unitPrice = totalPrice / quantity.
-- Typical TEMU mistake to AVOID: seeing unit price 250 and qty 2, then outputting unitPrice=125 and totalPrice=250. That is WRONG when 250 is the per-piece price.
-- After filling all product lines, VERIFY: sum(totalPrice) must match Order total / Grand total. If not, flip ambiguous lines between (A) and (B) until it fits.
-
-Other rules:
-- purchasedAt = exact date and time printed on the receipt (Czech wall clock), format YYYY-MM-DDTHH:mm:ss with NO timezone suffix and NO "Z".
-- Do NOT convert to UTC. If the receipt shows 15:30, return "...T15:30:00" (not 13:30Z).
-- Date only → use T12:00:00. Unreadable → null.
-- quantity default 1.
-- Decimal separator: dot.
-- Do not invent values. Unreadable → null / [].`;
+Rules:
+- Amounts WITH VAT (Cena s DPH / Celkem k úhradě / Order total / Grand total). Never prefer net without VAT.
+- Unit vs line total: use grand totalAmount so sum(items.totalPrice) ≈ totalAmount. If qty=2 and shown=250 is per-piece → unitPrice=250,totalPrice=500; if it's line total → unitPrice=125,totalPrice=250. Never invent by wrong division.
+- TEMU tables: Unit price column = unitPrice; Amount/Item total = totalPrice. Verify sum vs Order total.
+- purchasedAt = printed date/time as YYYY-MM-DDTHH:mm:ss (Czech wall clock, NO Z/timezone). Date only → T12:00:00. Unreadable → null.
+- quantity default 1. Decimal dot. Do not invent; unreadable → null/[].`;
 
   const baseGenerationConfig = {
     temperature: 0.05,
     responseMimeType: "application/json" as const,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 2048,
   };
 
   type ThinkingMode = "minimal" | "none";
@@ -155,19 +121,19 @@ Other rules:
       {
         role: "user",
         parts: [
-          { text: prompt },
           {
             inline_data: {
               mime_type: mimeType,
               data: base64,
             },
           },
+          { text: prompt },
         ],
       },
     ],
     generationConfig: {
       ...baseGenerationConfig,
-      // Gemini 3.x: thinkingLevel (thinkingBudget: 0 už není spolehlivé)
+      // Flash-Lite default je minimal; explicitně držíme nízkou latenci
       ...(thinking === "minimal"
         ? { thinkingConfig: { thinkingLevel: "minimal" } }
         : {}),
@@ -185,14 +151,15 @@ Other rules:
     attempted.push(model);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    // 3.x: nejdřív minimal thinking (rychlé OCR), pak bez thinkingConfig
+    // Jedna thinking varianta; retry bez configu jen při 400 na thinking*
     const thinkingAttempts: ThinkingMode[] = model.startsWith("gemini-3")
-      ? ["minimal", "none"]
+      ? ["minimal"]
       : ["none"];
 
     let modelFailed = false;
 
-    for (const thinking of thinkingAttempts) {
+    for (let i = 0; i < thinkingAttempts.length; i++) {
+      const thinking = thinkingAttempts[i]!;
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -216,8 +183,6 @@ Other rules:
           break;
         }
         data = null;
-        // Prázdná odpověď → zkus další thinking variantu / model
-        if (thinking === "minimal" && thinkingAttempts.length > 1) continue;
         attemptErrors.push(`${model}: prázdná odpověď`);
         modelFailed = true;
         break;
@@ -230,12 +195,13 @@ Other rules:
         break;
       }
 
-      // thinkingConfig nepodporovaný → zkus bez něj
+      // thinkingConfig nepodporovaný → jednou zkus bez něj
       if (
         thinking === "minimal" &&
         response.status === 400 &&
         /thinking|thinkingConfig|thinkingBudget|thinkingLevel/i.test(lastText)
       ) {
+        thinkingAttempts.push("none");
         continue;
       }
 
@@ -253,7 +219,6 @@ Other rules:
 
     if (data && usedModel) break;
     if (!modelFailed && data) break;
-    // vždy zkus další model, dokud něco neuspěje
   }
 
   if (!data || !usedModel) {
