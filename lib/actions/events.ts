@@ -83,7 +83,7 @@ function parseReceiptFields(formData: FormData) {
   }
 
   const totalAmount = Number(amountRaw.replace(",", "."));
-  if (Number.isNaN(totalAmount) || totalAmount < 0) {
+  if (!Number.isFinite(totalAmount)) {
     return { error: "Neplatná částka." as const };
   }
 

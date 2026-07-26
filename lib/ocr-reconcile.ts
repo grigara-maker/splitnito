@@ -27,7 +27,6 @@ function lineOptions(item: ReceiptItem): ReceiptItem[] {
 
   const add = (unitPrice: number, totalPrice: number) => {
     if (!Number.isFinite(unitPrice) || !Number.isFinite(totalPrice)) return;
-    if (unitPrice < 0 || totalPrice < 0) return;
     const u = round2(unitPrice);
     const t = round2(totalPrice);
     const key = optionKey(u, t);

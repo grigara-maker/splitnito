@@ -65,18 +65,27 @@ function toDraft(items: ReceiptItem[]): DraftItem[] {
   }));
 }
 
+function parseDraftDecimal(raw: string, fallback: number): number {
+  const cleaned = String(raw).trim().replace(",", ".");
+  if (!cleaned || cleaned === "-" || cleaned === "+") return fallback;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function draftsToItems(items: DraftItem[]): ReceiptItem[] {
   return items
     .filter((item) => item.name.trim())
     .map((item) => {
-      const quantity = Number(String(item.quantity).replace(",", ".")) || 1;
-      const unitPrice = Number(String(item.unitPrice).replace(",", ".")) || 0;
-      const totalPrice =
-        Number(String(item.totalPrice).replace(",", ".")) ||
-        quantity * unitPrice;
+      const quantity = parseDraftDecimal(item.quantity, 1);
+      const qty = quantity > 0 ? quantity : 1;
+      const unitPrice = parseDraftDecimal(item.unitPrice, 0);
+      const totalParsed = parseDraftDecimal(item.totalPrice, Number.NaN);
+      const totalPrice = Number.isFinite(totalParsed)
+        ? totalParsed
+        : Math.round(qty * unitPrice * 100) / 100;
       return {
         name: item.name.trim(),
-        quantity,
+        quantity: qty,
         unitPrice,
         totalPrice: Math.round(totalPrice * 100) / 100,
       };
@@ -150,7 +159,7 @@ export function ReceiptForm({
 
   const duplicateMatch = useMemo(() => {
     const amount = Number(String(totalAmount).replace(",", "."));
-    if (!vendor.trim() || !Number.isFinite(amount) || amount < 0) return null;
+    if (!vendor.trim() || !Number.isFinite(amount)) return null;
     return findMatchingReceipt(
       {
         vendor,
@@ -199,7 +208,7 @@ export function ReceiptForm({
       const next = prev.filter((row) => row.key !== key);
       const remaining = next.length > 0 ? next : [emptyItem()];
       const sum = itemsSum(draftsToItems(remaining));
-      setTotalAmount(sum > 0 ? String(sum) : "0");
+      setTotalAmount(String(sum));
       setTotalManual(false);
       return remaining;
     });
@@ -216,16 +225,16 @@ export function ReceiptForm({
         const next = { ...item, [field]: value };
 
         if (field === "quantity" || field === "unitPrice") {
-          const qty = Number(String(next.quantity).replace(",", "."));
-          const unit = Number(String(next.unitPrice).replace(",", "."));
-          if (Number.isFinite(qty) && Number.isFinite(unit) && qty > 0) {
+          const qty = parseDraftDecimal(next.quantity, 1);
+          const unit = parseDraftDecimal(next.unitPrice, Number.NaN);
+          if (Number.isFinite(qty) && qty > 0 && Number.isFinite(unit)) {
             next.totalPrice = String(Math.round(qty * unit * 100) / 100);
           }
         }
 
         if (field === "totalPrice") {
-          const qty = Number(String(next.quantity).replace(",", "."));
-          const total = Number(String(next.totalPrice).replace(",", "."));
+          const qty = parseDraftDecimal(next.quantity, 1);
+          const total = parseDraftDecimal(next.totalPrice, Number.NaN);
           if (Number.isFinite(qty) && qty > 0 && Number.isFinite(total)) {
             next.unitPrice = String(Math.round((total / qty) * 100) / 100);
           }
@@ -298,7 +307,7 @@ export function ReceiptForm({
         setItems(draftItems);
         setTotalManual(false);
         const sum = itemsSum(draftsToItems(draftItems));
-        if (sum > 0) {
+        if (sum !== 0 || computedItems.length > 0) {
           setTotalAmount(String(sum));
         } else if (json.totalAmount != null) {
           setTotalAmount(String(json.totalAmount));
@@ -407,8 +416,11 @@ export function ReceiptForm({
             setTotalManual(true);
             setTotalAmount(e.target.value);
           }}
-          placeholder="1250.50"
+          placeholder="1250.50 nebo -250 refund"
         />
+        <p className="text-xs text-muted-foreground">
+          Záporná hodnota = refund (vrácení peněz), sníží výdaje ve vyúčtování.
+        </p>
         {computedItems.length > 0 ? (
           <p className="text-xs text-muted-foreground">
             Součet položek: {itemsTotal.toFixed(2)} Kč
@@ -486,6 +498,7 @@ export function ReceiptForm({
                   onChange={(e) =>
                     updateItem(item.key, "unitPrice", e.target.value)
                   }
+                  placeholder="-120"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -496,6 +509,7 @@ export function ReceiptForm({
                   onChange={(e) =>
                     updateItem(item.key, "totalPrice", e.target.value)
                   }
+                  placeholder="-120"
                 />
               </div>
               <div className="flex items-end">

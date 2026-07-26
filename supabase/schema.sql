@@ -40,7 +40,7 @@ create table if not exists public.receipts (
   event_id uuid not null references public.events (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   vendor text not null,
-  total_amount numeric(12, 2) not null check (total_amount >= 0),
+  total_amount numeric(12, 2) not null check (total_amount >= -99999999.99 and total_amount <= 99999999.99),
   items jsonb,
   image_url text,
   created_at timestamptz not null default now()
