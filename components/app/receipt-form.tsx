@@ -416,11 +416,8 @@ export function ReceiptForm({
             setTotalManual(true);
             setTotalAmount(e.target.value);
           }}
-          placeholder="1250.50 nebo -250 refund"
+          placeholder="1250.50"
         />
-        <p className="text-xs text-muted-foreground">
-          Záporná hodnota = refund (vrácení peněz), sníží výdaje ve vyúčtování.
-        </p>
         {computedItems.length > 0 ? (
           <p className="text-xs text-muted-foreground">
             Součet položek: {itemsTotal.toFixed(2)} Kč
@@ -498,7 +495,6 @@ export function ReceiptForm({
                   onChange={(e) =>
                     updateItem(item.key, "unitPrice", e.target.value)
                   }
-                  placeholder="-120"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -509,7 +505,6 @@ export function ReceiptForm({
                   onChange={(e) =>
                     updateItem(item.key, "totalPrice", e.target.value)
                   }
-                  placeholder="-120"
                 />
               </div>
               <div className="flex items-end">
