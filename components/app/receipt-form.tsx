@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Plus, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { ThinkingOrb } from "thinking-orbs";
 
 import {
   createReceiptAction,
@@ -26,6 +27,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const initial: ActionState = {};
+
+function ReceiptAnalysisStatus() {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  return (
+    <>
+      <ThinkingOrb state="solving" size={20} aria-hidden />
+      <span>Analyzuji doklad</span>
+      <span
+        aria-hidden
+        className="border-l border-border pl-1.5 tabular-nums text-muted-foreground"
+      >
+        {elapsedSeconds} s
+      </span>
+    </>
+  );
+}
 
 type DraftItem = {
   key: string;
@@ -349,11 +376,19 @@ export function ReceiptForm({
           <Button
             type="button"
             variant="outline"
-            loading={ocrLoading}
+            disabled={ocrLoading}
+            aria-busy={ocrLoading || undefined}
+            aria-label={ocrLoading ? "Analyzuji doklad" : undefined}
             onClick={() => fileRef.current?.click()}
           >
-            <Upload />
-            Vyfotit / nahrát účtenku
+            {ocrLoading ? (
+              <ReceiptAnalysisStatus />
+            ) : (
+              <>
+                <Upload />
+                Vyfotit / nahrát účtenku
+              </>
+            )}
           </Button>
           {imageUrl ? (
             <span className="text-xs text-muted-foreground">Obrázek nahrán</span>
