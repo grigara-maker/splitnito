@@ -88,29 +88,73 @@ export function compressImageForUpload(file: File): Promise<File> {
   );
 }
 
+export type PreparedReceiptImages = {
+  ocr: File;
+  /** Komprese pro Storage může dobíhat souběžně s OCR požadavkem. */
+  upload: Promise<File>;
+};
+
+async function prepareUploadFromBitmap(
+  bitmap: ImageBitmap,
+  file: File,
+  maxDim: number,
+  ocr: File
+): Promise<File> {
+  try {
+    if (file.size <= UPLOAD_SKIP_UNDER_BYTES) return file;
+
+    const uploadScale = Math.min(1, UPLOAD_MAX_EDGE / maxDim);
+    if (
+      uploadScale >= 0.92 &&
+      file.size < UPLOAD_SKIP_UNDER_BYTES * 2
+    ) {
+      return file;
+    }
+
+    // Zachovává stávající možnost znovu použít dostatečně velkou OCR variantu.
+    if (
+      ocr !== file &&
+      ocr.size <= UPLOAD_SKIP_UNDER_BYTES &&
+      OCR_MAX_EDGE >= UPLOAD_MAX_EDGE * 0.85
+    ) {
+      return ocr;
+    }
+
+    const blob = await renderJpeg(bitmap, UPLOAD_MAX_EDGE, UPLOAD_QUALITY);
+    if (blob && blob.size < file.size) {
+      return toJpegFile(blob, file.name);
+    }
+    return file;
+  } catch {
+    return file;
+  } finally {
+    bitmap.close();
+  }
+}
+
 /**
- * Jedno dekódování → OCR + upload varianty (ušetří čas na mobilu).
+ * Připraví OCR soubor jako první. Storage varianta pak může dobíhat zároveň
+ * se síťovým OCR požadavkem, aniž by se obrázek dekódoval podruhé.
  */
-export async function compressImagesForReceipt(
+export async function prepareImagesForReceipt(
   file: File
-): Promise<{ ocr: File; upload: File }> {
+): Promise<PreparedReceiptImages> {
   if (!file.type.startsWith("image/") || file.type === "image/gif") {
-    return { ocr: file, upload: file };
+    return { ocr: file, upload: Promise.resolve(file) };
   }
 
   const needsOcr = file.size > OCR_SKIP_UNDER_BYTES;
   const needsUpload = file.size > UPLOAD_SKIP_UNDER_BYTES;
   if (!needsOcr && !needsUpload) {
-    return { ocr: file, upload: file };
+    return { ocr: file, upload: Promise.resolve(file) };
   }
 
+  let bitmap: ImageBitmap | null = null;
   try {
-    const bitmap = await createImageBitmap(file);
+    bitmap = await createImageBitmap(file);
     const maxDim = Math.max(bitmap.width, bitmap.height);
 
     let ocr = file;
-    let upload = file;
-
     if (needsOcr) {
       const ocrScale = Math.min(1, OCR_MAX_EDGE / maxDim);
       if (!(ocrScale >= 0.92 && file.size < OCR_SKIP_UNDER_BYTES * 2)) {
@@ -121,28 +165,21 @@ export async function compressImagesForReceipt(
       }
     }
 
-    if (needsUpload) {
-      const uploadScale = Math.min(1, UPLOAD_MAX_EDGE / maxDim);
-      if (!(uploadScale >= 0.92 && file.size < UPLOAD_SKIP_UNDER_BYTES * 2)) {
-        // Když OCR už zmenšilo pod upload limit a max edge stačí, znovu použij OCR
-        if (
-          ocr !== file &&
-          ocr.size <= UPLOAD_SKIP_UNDER_BYTES &&
-          OCR_MAX_EDGE >= UPLOAD_MAX_EDGE * 0.85
-        ) {
-          upload = ocr;
-        } else {
-          const blob = await renderJpeg(bitmap, UPLOAD_MAX_EDGE, UPLOAD_QUALITY);
-          if (blob && blob.size < file.size) {
-            upload = toJpegFile(blob, file.name);
-          }
-        }
-      }
-    }
-
-    bitmap.close();
+    const upload = prepareUploadFromBitmap(bitmap, file, maxDim, ocr);
+    bitmap = null; // zavře ji prepareUploadFromBitmap ve finally
     return { ocr, upload };
   } catch {
-    return { ocr: file, upload: file };
+    bitmap?.close();
+    return { ocr: file, upload: Promise.resolve(file) };
   }
+}
+
+/**
+ * Jedno dekódování → OCR + upload varianty (ušetří čas na mobilu).
+ */
+export async function compressImagesForReceipt(
+  file: File
+): Promise<{ ocr: File; upload: File }> {
+  const prepared = await prepareImagesForReceipt(file);
+  return { ocr: prepared.ocr, upload: await prepared.upload };
 }

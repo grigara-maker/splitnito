@@ -12,7 +12,7 @@ import {
 } from "@/lib/actions/events";
 import { toDatetimeLocalInPrague } from "@/lib/datetime-prague";
 import {
-  compressImagesForReceipt,
+  prepareImagesForReceipt,
 } from "@/lib/image-compress";
 import {
   findMatchingReceipt,
@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 
 const initial: ActionState = {};
 
-function ReceiptAnalysisStatus() {
+function ReceiptAnalysisStatus({ active }: { active: boolean }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -42,7 +42,14 @@ function ReceiptAnalysisStatus() {
 
   return (
     <>
-      <ThinkingOrb state="solving" size={20} aria-hidden />
+      <ThinkingOrb
+        state="solving"
+        size={64}
+        paused={!active}
+        aria-hidden
+        className="shrink-0"
+        style={{ width: 24, height: 24 }}
+      />
       <span>Analyzuji doklad</span>
       <span
         aria-hidden
@@ -175,6 +182,7 @@ export function ReceiptForm({
   );
   const [imageUrl, setImageUrl] = useState(initialReceipt?.imageUrl ?? "");
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [analysisAnimationActive, setAnalysisAnimationActive] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -275,34 +283,46 @@ export function ReceiptForm({
   async function handleFile(file: File) {
     setUploadError(null);
     setOcrWarning(null);
+    setAnalysisAnimationActive(false);
     setOcrLoading(true);
     try {
       const supabase = createClient();
 
-      // Jedno dekódování → OCR + upload; auth paralelně
-      const [compressed, userResult] = await Promise.all([
-        compressImagesForReceipt(file),
-        supabase.auth.getUser(),
+      // OCR varianta + lokální session paralelně. Autoritu dál ověřuje API
+      // a Storage RLS; tady potřebujeme jen ID pro cestu objektu.
+      const [prepared, sessionResult] = await Promise.all([
+        prepareImagesForReceipt(file),
+        supabase.auth.getSession(),
       ]);
-      const { ocr: ocrFile, upload: uploadFile } = compressed;
 
-      const user = userResult.data.user;
+      const user = sessionResult.data.session?.user;
       if (!user) throw new Error("Nejste přihlášeni.");
 
       const ocrBody = new FormData();
-      ocrBody.append("file", ocrFile);
+      ocrBody.append("file", prepared.ocr);
 
-      const ext =
-        uploadFile.name.split(".").pop() ||
-        (uploadFile.type === "image/jpeg" ? "jpg" : "bin");
-      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      // OCR síť začne hned; větší Storage JPEG se mezitím dokončí a nahraje.
+      const ocrPromise = fetch("/api/ocr", { method: "POST", body: ocrBody });
+      const uploadPromise = prepared.upload.then(async (uploadFile) => {
+        const ext =
+          uploadFile.name.split(".").pop() ||
+          (uploadFile.type === "image/jpeg" ? "jpg" : "bin");
+        const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+        const uploadRequest = supabase.storage
+          .from("receipts")
+          .upload(path, uploadFile, {
+            upsert: false,
+            contentType: uploadFile.type || undefined,
+          });
+        // Kvalitní orb se rozhýbe až po kompresi, když už běží jen síť.
+        setAnalysisAnimationActive(true);
+        const uploadResult = await uploadRequest;
+        return { uploadResult, path };
+      });
 
-      const [uploadResult, ocrRes] = await Promise.all([
-        supabase.storage.from("receipts").upload(path, uploadFile, {
-          upsert: false,
-          contentType: uploadFile.type || undefined,
-        }),
-        fetch("/api/ocr", { method: "POST", body: ocrBody }),
+      const [{ uploadResult, path }, ocrRes] = await Promise.all([
+        uploadPromise,
+        ocrPromise,
       ]);
 
       if (uploadResult.error) {
@@ -346,6 +366,7 @@ export function ReceiptForm({
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Nahrání selhalo");
     } finally {
+      setAnalysisAnimationActive(false);
       setOcrLoading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
@@ -382,7 +403,7 @@ export function ReceiptForm({
             onClick={() => fileRef.current?.click()}
           >
             {ocrLoading ? (
-              <ReceiptAnalysisStatus />
+              <ReceiptAnalysisStatus active={analysisAnimationActive} />
             ) : (
               <>
                 <Upload />
