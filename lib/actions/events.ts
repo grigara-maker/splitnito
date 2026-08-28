@@ -637,6 +637,16 @@ export async function confirmPaymentAction(
     return { error: "Potvrdit platbu může jen příjemce." };
   }
 
+  if (transfer.status === "pending") {
+    return {
+      error: "Plátce zatím neoznačil platbu jako odeslanou.",
+    };
+  }
+
+  if (transfer.status === "confirmed") {
+    return { success: "Platba už byla potvrzena." };
+  }
+
   summary.transfers = summary.transfers.map((t) =>
     t.id === transferId ? { ...t, status: "confirmed" as const } : t
   );
@@ -659,4 +669,56 @@ export async function confirmPaymentAction(
       ? "Všechny platby potvrzeny — vyúčtování je hotové."
       : "Platba potvrzena.",
   };
+}
+
+export async function markPaymentSentAction(
+  eventId: string,
+  transferId: string
+): Promise<ActionState> {
+  const { supabase, user } = await requireProfile();
+
+  const { data: settlement } = await supabase
+    .from("settlements")
+    .select("id, summary_data")
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (!settlement?.summary_data) {
+    return { error: "Vyúčtování nenalezeno." };
+  }
+
+  const summary = normalizeSettlementSummary(settlement.summary_data);
+  const transfer = summary.transfers.find((t) => t.id === transferId);
+
+  if (!transfer) {
+    return { error: "Platba nenalezena." };
+  }
+
+  if (transfer.fromUserId !== user.id) {
+    return { error: "Odeslání platby může označit jen plátce." };
+  }
+
+  if (transfer.status === "confirmed") {
+    return { success: "Příjemce už platbu potvrdil." };
+  }
+
+  if (transfer.status === "sent") {
+    return { success: "Platba už je označená jako odeslaná." };
+  }
+
+  summary.transfers = summary.transfers.map((t) =>
+    t.id === transferId ? { ...t, status: "sent" as const } : t
+  );
+  summary.allPaid = false;
+
+  const { error } = await supabase
+    .from("settlements")
+    .update({ summary_data: summary as unknown as Json })
+    .eq("id", settlement.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/dashboard");
+  return { success: "Platba byla označena jako odeslaná." };
 }

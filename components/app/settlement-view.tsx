@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import {
   confirmPaymentAction,
+  markPaymentSentAction,
   reopenEventAction,
 } from "@/lib/actions/events";
 import { buildSpayd } from "@/lib/spayd";
@@ -170,7 +171,17 @@ function TransferCard({
   const isDebtor = transfer.fromUserId === currentUserId;
   const isCreditor = transfer.toUserId === currentUserId;
   const confirmed = transfer.status === "confirmed";
+  const sent = transfer.status === "sent";
   const canShowQr = !confirmed && isDebtor && Boolean(transfer.toIban);
+
+  function runPaymentAction(action: () => Promise<{ error?: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (result.error) setError(result.error);
+      else onChanged();
+    });
+  }
 
   return (
     <li className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
@@ -178,47 +189,77 @@ function TransferCard({
         <p className="font-medium">
           {transfer.fromName} → {transfer.toName}: {formatCzk(transfer.amount)}
         </p>
-        <Badge variant={confirmed ? "secondary" : "outline"}>
-          {confirmed ? "Hotovo" : "Čeká na platbu"}
+        <Badge variant={confirmed || sent ? "secondary" : "outline"}>
+          {confirmed ? "Přijato" : sent ? "Odesláno" : "Čeká na platbu"}
         </Badge>
       </div>
 
       {confirmed ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          Platba byla potvrzena.
+          {isDebtor
+            ? "Příjemce potvrdil, že platbu přijal."
+            : isCreditor
+              ? "Potvrdili jste přijetí této platby."
+              : "Platba byla přijata a potvrzena."}
         </p>
       ) : isDebtor ? (
-        canShowQr ? (
-          <PaymentQr
-            iban={transfer.toIban!}
-            amount={transfer.amount}
-            recipientName={transfer.toName}
-            message={paymentMessage}
-          />
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Příjemce nemá vyplněný IBAN — požádejte ho o doplnění v profilu.
-          </p>
-        )
+        <div className="mt-3 flex flex-col gap-3">
+          {canShowQr ? (
+            <PaymentQr
+              iban={transfer.toIban!}
+              amount={transfer.amount}
+              recipientName={transfer.toName}
+              message={paymentMessage}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Příjemce nemá vyplněný IBAN — požádejte ho o doplnění v profilu.
+            </p>
+          )}
+          {sent ? (
+            <p className="text-sm text-muted-foreground">
+              Platbu jste označil/a jako odeslanou. Čeká se na potvrzení
+              příjemce.
+            </p>
+          ) : (
+            <Button
+              className="w-full sm:w-auto sm:self-start"
+              loading={pending}
+              onClick={() =>
+                runPaymentAction(() =>
+                  markPaymentSentAction(eventId, transfer.id)
+                )
+              }
+            >
+              Označit jako zaplaceno
+            </Button>
+          )}
+        </div>
       ) : isCreditor ? (
         <div className="mt-3">
-          <Button
-            className="w-full sm:w-auto"
-            loading={pending}
-            onClick={() => {
-              startTransition(async () => {
-                const result = await confirmPaymentAction(eventId, transfer.id);
-                if (result.error) setError(result.error);
-                else onChanged();
-              });
-            }}
-          >
-            Potvrdit zaplacení
-          </Button>
+          {sent ? (
+            <Button
+              className="w-full sm:w-auto"
+              loading={pending}
+              onClick={() =>
+                runPaymentAction(() =>
+                  confirmPaymentAction(eventId, transfer.id)
+                )
+              }
+            >
+              Potvrdit přijetí platby
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Čeká se, až plátce označí platbu jako odeslanou.
+            </p>
+          )}
         </div>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">
-          Platba mezi ostatními členy.
+          {sent
+            ? "Plátce označil platbu jako odeslanou; čeká se na potvrzení příjemce."
+            : "Platba mezi ostatními členy čeká na odeslání."}
         </p>
       )}
 
@@ -248,10 +289,23 @@ function PaymentQr({
   message: string;
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [qrError, setQrError] = useState(false);
   const spayd = buildSpayd({ iban, amount, recipientName, message });
 
   useEffect(() => {
-    void QRCode.toDataURL(spayd, { width: 200, margin: 1 }).then(setDataUrl);
+    let active = true;
+    setDataUrl(null);
+    setQrError(false);
+    void QRCode.toDataURL(spayd, { width: 200, margin: 1 })
+      .then((url) => {
+        if (active) setDataUrl(url);
+      })
+      .catch(() => {
+        if (active) setQrError(true);
+      });
+    return () => {
+      active = false;
+    };
   }, [spayd]);
 
   return (
@@ -263,6 +317,10 @@ function PaymentQr({
           alt="QR platba"
           className="size-40 rounded-lg bg-white p-2 ring-1 ring-border"
         />
+      ) : qrError ? (
+        <div className="flex size-40 items-center justify-center rounded-lg bg-muted p-3 text-center text-xs text-destructive">
+          QR kód se nepodařilo vytvořit.
+        </div>
       ) : (
         <div className="size-40 animate-pulse rounded-lg bg-muted" />
       )}

@@ -10,7 +10,7 @@ export type SettlementMember = {
   balance: number;
 };
 
-export type PaymentStatus = "pending" | "confirmed";
+export type PaymentStatus = "pending" | "sent" | "confirmed";
 
 export type SettlementTransfer = {
   id: string;
@@ -175,7 +175,12 @@ export function normalizeSettlementSummary(raw: unknown): SettlementSummary {
     toName: t.toName ?? "",
     toIban: t.toIban ?? null,
     amount: Number(t.amount),
-    status: t.status === "confirmed" ? "confirmed" : "pending",
+    status:
+      t.status === "confirmed"
+        ? "confirmed"
+        : t.status === "sent"
+          ? "sent"
+          : "pending",
   }));
 
   const members: SettlementMember[] = (data.members ?? []).map((m) => {
