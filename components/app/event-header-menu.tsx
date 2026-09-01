@@ -22,15 +22,18 @@ export function EventHeaderMenu({
   eventId,
   eventName,
   canClose,
+  emailAvailable = false,
 }: {
   eventId: string;
   eventName: string;
   canClose: boolean;
+  emailAvailable?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<ConfirmKind>(null);
   const [loading, setLoading] = useState(false);
+  const [notifyByEmail, setNotifyByEmail] = useState(true);
 
   function cancelConfirm() {
     if (loading) return;
@@ -43,7 +46,9 @@ export function EventHeaderMenu({
     setLoading(true);
     setError(null);
     try {
-      const result = await closeEventAction(eventId);
+      const result = await closeEventAction(eventId, {
+        notifyByEmail: emailAvailable && notifyByEmail,
+      });
       if (result.error) {
         setError(result.error);
         setConfirming(null);
@@ -82,10 +87,24 @@ export function EventHeaderMenu({
 
   if (confirming === "close") {
     return (
-      <div className="flex max-w-[14rem] flex-col items-end gap-2 sm:max-w-xs">
+      <div className="flex max-w-[16rem] flex-col items-end gap-2 sm:max-w-xs">
         <p className="text-right text-xs text-muted-foreground sm:text-sm">
           Opravdu uzavřít vyúčtování? Doklady se zamknou a vypočítají se platby.
         </p>
+        {emailAvailable ? (
+          <label className="flex cursor-pointer items-start justify-end gap-2 text-right text-xs text-muted-foreground sm:text-sm">
+            <span>
+              Rozeslat e-maily s QR kódem a připomínat každých 24 hodin
+            </span>
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-primary"
+              checked={notifyByEmail}
+              disabled={loading}
+              onChange={(e) => setNotifyByEmail(e.target.checked)}
+            />
+          </label>
+        ) : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"

@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getAppSession } from "@/lib/auth/session";
+import { isEmailConfigured } from "@/lib/email/config";
 import {
   normalizeSettlementSummary,
   type SettlementSummary,
@@ -31,13 +32,14 @@ export default async function EventPage({
 
   const { data: event } = await supabase
     .from("events")
-    .select("id, name, status, company_id, created_at")
+    .select("id, name, status, company_id, created_at, notify_emails")
     .eq("id", id)
     .maybeSingle();
 
   if (!event || event.company_id !== profile.company_id) notFound();
 
   const isClosed = event.status === "closed";
+  const emailAvailable = isEmailConfigured();
 
   // Jen data potřebná pro první paint — duplicity napříč firmou se donačtou na klientu
   const [receiptsResult, revenuesResult, settlementResult, companyResult] =
@@ -157,6 +159,7 @@ export default async function EventPage({
             eventId={event.id}
             eventName={event.name}
             canClose={event.status === "active"}
+            emailAvailable={emailAvailable}
           />
         </div>
       </div>
@@ -224,6 +227,9 @@ export default async function EventPage({
             canReopen={!settlement.allPaid}
             companyName={company?.name ?? "firma"}
             eventName={event.name}
+            notifyEmails={event.notify_emails !== false}
+            emailAvailable={emailAvailable}
+            canManageEmails={isCompanyAdmin}
           />
         </section>
       ) : null}

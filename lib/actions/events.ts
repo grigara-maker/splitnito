@@ -2,7 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
+import { isEmailConfigured } from "@/lib/email/config";
+import {
+  notifyEventClosed,
+  notifyPaymentConfirmed,
+  notifyPaymentSent,
+  resendPendingNotifications,
+} from "@/lib/email/notifications";
 import {
   calculateSettlement,
   normalizeSettlementSummary,
@@ -423,7 +431,11 @@ export async function deleteRevenueAction(
   return { success: "Tržba byla smazána." };
 }
 
-export async function closeEventAction(eventId: string): Promise<ActionState> {
+export async function closeEventAction(
+  eventId: string,
+  options: { notifyByEmail?: boolean } = {}
+): Promise<ActionState> {
+  const notifyByEmail = options.notifyByEmail !== false;
   const { supabase, profile } = await requireProfile();
 
   const { data: event } = await supabase
@@ -504,17 +516,98 @@ export async function closeEventAction(eventId: string): Promise<ActionState> {
 
   const { error: eventError } = await supabase
     .from("events")
-    .update({ status: "closed" })
+    .update({ status: "closed", notify_emails: notifyByEmail })
     .eq("id", eventId);
 
   if (eventError) {
     return { error: eventError.message };
   }
 
+  const willEmail = notifyByEmail && isEmailConfigured();
+  if (willEmail) {
+    after(async () => {
+      await notifyEventClosed(eventId);
+    });
+  }
+
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/dashboard");
   revalidatePath("/history");
-  return { success: "Vyúčtování bylo uzavřeno." };
+  return {
+    success: willEmail
+      ? "Vyúčtování bylo uzavřeno. Rozesíláme e-maily s QR kódy."
+      : "Vyúčtování bylo uzavřeno.",
+  };
+}
+
+/** Zapnutí/vypnutí e-mailových notifikací u konkrétní akce. */
+export async function setEventNotificationsAction(
+  eventId: string,
+  enabled: boolean
+): Promise<ActionState> {
+  const { supabase, profile } = await requireProfile();
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, company_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event || event.company_id !== profile.company_id) {
+    return { error: "Akce nenalezena." };
+  }
+
+  const { error } = await supabase
+    .from("events")
+    .update({ notify_emails: enabled })
+    .eq("id", eventId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/events/${eventId}`);
+  return {
+    success: enabled
+      ? "E-mailové připomínky jsou zapnuté."
+      : "E-mailové připomínky jsou vypnuté.",
+  };
+}
+
+/** Ruční rozeslání připomínek k nedoplaceným platbám. */
+export async function resendSettlementEmailsAction(
+  eventId: string
+): Promise<ActionState> {
+  const { supabase, profile } = await requireProfile();
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, company_id, status")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event || event.company_id !== profile.company_id) {
+    return { error: "Akce nenalezena." };
+  }
+  if (event.status !== "closed") {
+    return { error: "E-maily se posílají až po uzavření akce." };
+  }
+  if (!isEmailConfigured()) {
+    return { error: "Odesílání e-mailů zatím není nastavené." };
+  }
+
+  const result = await resendPendingNotifications(eventId);
+
+  if (result.sent === 0 && result.failed === 0) {
+    return {
+      success:
+        "Nic k odeslání — připomínky už odešly během posledních 24 hodin.",
+    };
+  }
+  if (result.failed > 0) {
+    return {
+      error: `Odesláno ${result.sent}, nepodařilo se ${result.failed}. Zkontrolujte nastavení SMTP.`,
+    };
+  }
+  return { success: `Odesláno ${result.sent} e-mailů.` };
 }
 
 export async function deleteEventAction(eventId: string): Promise<ActionState> {
@@ -661,12 +754,18 @@ export async function confirmPaymentAction(
 
   if (error) return { error: error.message };
 
+  if (summary.allPaid && isEmailConfigured()) {
+    after(async () => {
+      await notifyPaymentConfirmed(eventId);
+    });
+  }
+
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/history");
   revalidatePath("/dashboard");
   return {
     success: summary.allPaid
-      ? "Všechny platby potvrzeny — vyúčtování je hotové."
+      ? "Všechny platby potvrzeny — vyúčtování je hotové, posíláme souhrn e-mailem."
       : "Platba potvrzena.",
   };
 }
@@ -717,6 +816,12 @@ export async function markPaymentSentAction(
     .eq("id", settlement.id);
 
   if (error) return { error: error.message };
+
+  if (isEmailConfigured()) {
+    after(async () => {
+      await notifyPaymentSent(eventId, transferId);
+    });
+  }
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/dashboard");

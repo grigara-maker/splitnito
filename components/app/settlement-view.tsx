@@ -12,6 +12,7 @@ import {
 import { buildSpayd } from "@/lib/spayd";
 import { formatCzk } from "@/lib/iban";
 import type { SettlementSummary, SettlementTransfer } from "@/lib/settlement";
+import { SettlementEmails } from "@/components/app/settlement-emails";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -22,6 +23,9 @@ export function SettlementView({
   canReopen,
   companyName,
   eventName,
+  notifyEmails,
+  emailAvailable,
+  canManageEmails,
 }: {
   summary: SettlementSummary;
   currentUserId: string;
@@ -29,6 +33,9 @@ export function SettlementView({
   canReopen: boolean;
   companyName: string;
   eventName: string;
+  notifyEmails: boolean;
+  emailAvailable: boolean;
+  canManageEmails: boolean;
 }) {
   const paymentMessage = `Splitnito - ${companyName} - ${eventName}`;
   const router = useRouter();
@@ -65,6 +72,14 @@ export function SettlementView({
           </Button>
         ) : null}
       </div>
+
+      <SettlementEmails
+        eventId={eventId}
+        notifyEmails={notifyEmails}
+        emailAvailable={emailAvailable}
+        canManage={canManageEmails}
+        allPaid={summary.allPaid}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Celkem výdaje" value={formatCzk(summary.totalExpenses)} />

@@ -1,3 +1,8 @@
+export type EmailNotificationKind =
+  | "payment_request"
+  | "payment_received"
+  | "event_summary";
+
 export type Json =
   | string
   | number
@@ -36,6 +41,7 @@ export type Database = {
           company_id: string;
           name: string;
           iban: string | null;
+          email: string | null;
           role: "company" | "member";
           created_at: string;
         };
@@ -44,6 +50,7 @@ export type Database = {
           company_id: string;
           name: string;
           iban?: string | null;
+          email?: string | null;
           role?: "company" | "member";
           created_at?: string;
         };
@@ -52,6 +59,7 @@ export type Database = {
           company_id?: string;
           name?: string;
           iban?: string | null;
+          email?: string | null;
           role?: "company" | "member";
           created_at?: string;
         };
@@ -71,6 +79,7 @@ export type Database = {
           company_id: string;
           name: string;
           status: "active" | "closed";
+          notify_emails: boolean;
           created_at: string;
         };
         Insert: {
@@ -78,6 +87,7 @@ export type Database = {
           company_id: string;
           name: string;
           status?: "active" | "closed";
+          notify_emails?: boolean;
           created_at?: string;
         };
         Update: {
@@ -85,6 +95,7 @@ export type Database = {
           company_id?: string;
           name?: string;
           status?: "active" | "closed";
+          notify_emails?: boolean;
           created_at?: string;
         };
         Relationships: [
@@ -225,6 +236,56 @@ export type Database = {
           },
         ];
       };
+      email_notifications: {
+        Row: {
+          id: string;
+          event_id: string | null;
+          company_id: string | null;
+          kind: EmailNotificationKind;
+          transfer_id: string | null;
+          recipient_id: string | null;
+          recipient_email: string;
+          status: "sent" | "failed";
+          error: string | null;
+          reminder_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_id?: string | null;
+          company_id?: string | null;
+          kind: EmailNotificationKind;
+          transfer_id?: string | null;
+          recipient_id?: string | null;
+          recipient_email: string;
+          status?: "sent" | "failed";
+          error?: string | null;
+          reminder_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_id?: string | null;
+          company_id?: string | null;
+          kind?: EmailNotificationKind;
+          transfer_id?: string | null;
+          recipient_id?: string | null;
+          recipient_email?: string;
+          status?: "sent" | "failed";
+          error?: string | null;
+          reminder_index?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "email_notifications_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -270,6 +331,8 @@ export type Event = Database["public"]["Tables"]["events"]["Row"];
 export type Receipt = Database["public"]["Tables"]["receipts"]["Row"];
 export type Revenue = Database["public"]["Tables"]["revenues"]["Row"];
 export type Settlement = Database["public"]["Tables"]["settlements"]["Row"];
+export type EmailNotification =
+  Database["public"]["Tables"]["email_notifications"]["Row"];
 
 export type ReceiptItem = {
   name: string;
