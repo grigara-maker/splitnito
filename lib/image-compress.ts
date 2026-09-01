@@ -8,6 +8,19 @@ const OCR_MAX_EDGE = 1280;
 const OCR_QUALITY = 0.72;
 const OCR_SKIP_UNDER_BYTES = 280_000;
 
+/**
+ * Vercel odmítne požadavek s tělem nad 4,5 MB dřív, než doběhne do route
+ * handleru (HTTP 413). Držíme se bezpečně pod limitem i s režií multipartu.
+ */
+export const OCR_MAX_BYTES = 3_800_000;
+
+/** Postupné zmenšování, když ani výchozí komprese nestačí. */
+const OCR_FALLBACK_STEPS = [
+  { maxEdge: 1024, quality: 0.62 },
+  { maxEdge: 800, quality: 0.55 },
+  { maxEdge: 640, quality: 0.5 },
+];
+
 /** Storage: pořád čitelný doklad, ale ne 5–10 MB z telefonu. */
 const UPLOAD_MAX_EDGE = 1800;
 const UPLOAD_QUALITY = 0.84;
@@ -71,6 +84,21 @@ async function compressImage(
   } catch {
     return file;
   }
+}
+
+async function shrinkUnderOcrLimit(
+  bitmap: ImageBitmap,
+  current: File
+): Promise<File> {
+  let result = current;
+  for (const step of OCR_FALLBACK_STEPS) {
+    if (result.size <= OCR_MAX_BYTES) break;
+    const blob = await renderJpeg(bitmap, step.maxEdge, step.quality);
+    if (blob && blob.size < result.size) {
+      result = toJpegFile(blob, current.name);
+    }
+  }
+  return result;
 }
 
 /** Menší JPEG pro Gemini OCR (rychlejší upload i inference). */
@@ -162,6 +190,9 @@ export async function prepareImagesForReceipt(
         if (blob && blob.size < file.size) {
           ocr = toJpegFile(blob, file.name);
         }
+      }
+      if (ocr.size > OCR_MAX_BYTES) {
+        ocr = await shrinkUnderOcrLimit(bitmap, ocr);
       }
     }
 

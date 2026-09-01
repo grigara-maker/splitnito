@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/events";
 import { toDatetimeLocalInPrague } from "@/lib/datetime-prague";
 import {
+  OCR_MAX_BYTES,
   prepareImagesForReceipt,
 } from "@/lib/image-compress";
 import {
@@ -298,11 +299,17 @@ export function ReceiptForm({
       const user = sessionResult.data.session?.user;
       if (!user) throw new Error("Nejste přihlášeni.");
 
+      // Soubor nad limit serverless funkce by skončil na 413 ještě před
+      // route handlerem — doklad pak jen nahrajeme a necháme vyplnit ručně.
+      const ocrTooLarge = prepared.ocr.size > OCR_MAX_BYTES;
+
       const ocrBody = new FormData();
       ocrBody.append("file", prepared.ocr);
 
       // OCR síť začne hned; větší Storage JPEG se mezitím dokončí a nahraje.
-      const ocrPromise = fetch("/api/ocr", { method: "POST", body: ocrBody });
+      const ocrPromise = ocrTooLarge
+        ? null
+        : fetch("/api/ocr", { method: "POST", body: ocrBody });
       const uploadPromise = prepared.upload.then(async (uploadFile) => {
         const ext =
           uploadFile.name.split(".").pop() ||
@@ -334,12 +341,22 @@ export function ReceiptForm({
       } = supabase.storage.from("receipts").getPublicUrl(path);
       setImageUrl(publicUrl);
 
-      const json = await ocrRes.json();
+      if (!ocrRes) {
+        setOcrWarning(
+          "Soubor je moc velký na automatické čtení. Doklad je nahraný — částku a položky prosím vyplňte ručně."
+        );
+        return;
+      }
+
+      // Chyby brány (413, 504) nevrací JSON — nesmí shodit už hotový upload.
+      const json = await ocrRes.json().catch(() => ({}) as { error?: string });
 
       if (!ocrRes.ok) {
         setOcrWarning(
           json.error ??
-            "OCR se nepodařilo. Doklad můžete vyplnit ručně a uložit."
+            (ocrRes.status === 413
+              ? "Soubor je moc velký na automatické čtení. Doklad je nahraný — vyplňte ho prosím ručně."
+              : "OCR se nepodařilo. Doklad můžete vyplnit ručně a uložit.")
         );
         return;
       }
