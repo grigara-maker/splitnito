@@ -28,7 +28,11 @@ export function formatDate(value: string | Date): string {
   }).format(date);
 }
 
-/** Bulletproof tlačítko — tabulka místo <a> s paddingem kvůli Outlooku. */
+/**
+ * Výplň, rámeček i zaoblení drží samotný odkaz. Kdyby je nesla buňka,
+ * globální `border-collapse: collapse` by rámeček vykreslil hranatě kolem
+ * zaoblené výplně a vznikla by dvojitá hrana.
+ */
 export function button(
   href: string,
   label: string,
@@ -39,10 +43,10 @@ export function button(
   const border = variant === "primary" ? t.brand : t.border;
 
   return `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:separate;">
   <tr>
-    <td align="center" bgcolor="${bg}" style="border-radius:10px;border:1px solid ${border};">
-      <a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:14px 26px;font-family:${t.fontSans};font-size:15px;font-weight:700;line-height:1;color:${color};text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a>
+    <td align="center" style="padding:0;">
+      <a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;background-color:${bg};border:1px solid ${border};border-radius:10px;padding:14px 26px;font-family:${t.fontSans};font-size:15px;font-weight:700;line-height:1.2;color:${color};text-decoration:none;">${escapeHtml(label)}</a>
     </td>
   </tr>
 </table>`;
@@ -88,7 +92,8 @@ export function amountBlock(label: string, amount: number): string {
   <tr>
     <td align="center" style="padding:22px 16px;background-color:${t.brandSoft};border-radius:14px;">
       <div style="font-family:${t.fontSans};font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:${t.muted};">${escapeHtml(label)}</div>
-      <div style="margin-top:6px;font-family:${t.fontHeading};font-size:34px;line-height:1.1;font-weight:600;color:${t.brand};">${escapeHtml(formatCurrency(amount))}</div>
+      <!-- Bezpatkové písmo: Georgia má minuskové číslice, které by proti "Kč" seděly níž. -->
+      <div style="margin-top:6px;font-family:${t.fontSans};font-size:32px;line-height:1.15;font-weight:700;letter-spacing:-0.01em;color:${t.brand};">${escapeHtml(formatCurrency(amount))}</div>
     </td>
   </tr>
 </table>`;
