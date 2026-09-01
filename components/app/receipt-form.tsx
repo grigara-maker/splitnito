@@ -1,6 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AlertTriangle, Plus, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ThinkingOrb } from "thinking-orbs";
@@ -11,10 +19,7 @@ import {
   type ActionState,
 } from "@/lib/actions/events";
 import { toDatetimeLocalInPrague } from "@/lib/datetime-prague";
-import {
-  OCR_MAX_BYTES,
-  prepareImagesForReceipt,
-} from "@/lib/image-compress";
+import { OCR_MAX_BYTES, prepareReceiptFile } from "@/lib/image-compress";
 import {
   findMatchingReceipt,
   type ReceiptDuplicateKey,
@@ -78,6 +83,77 @@ export type ReceiptFormInitial = {
   imageUrl: string | null;
   items?: unknown;
 };
+
+/**
+ * Vlastní komponenta s memo: u dlouhé účtenky jinak každý stisk klávesy
+ * překresloval všechny řádky, což na mobilu znatelně sekalo.
+ */
+const ItemRow = memo(function ItemRow({
+  item,
+  index,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  item: DraftItem;
+  index: number;
+  canRemove: boolean;
+  onChange: (
+    key: string,
+    field: keyof Omit<DraftItem, "key">,
+    value: string
+  ) => void;
+  onRemove: (key: string) => void;
+}) {
+  return (
+    <div className="grid gap-2 rounded-xl bg-muted/40 p-3 ring-1 ring-foreground/5 sm:grid-cols-[1.4fr_0.7fr_0.9fr_0.9fr_auto]">
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Název {index + 1}</span>
+        <Input
+          value={item.name}
+          onChange={(e) => onChange(item.key, "name", e.target.value)}
+          placeholder="Káva"
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Počet</span>
+        <Input
+          inputMode="decimal"
+          value={item.quantity}
+          onChange={(e) => onChange(item.key, "quantity", e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Cena / ks</span>
+        <Input
+          inputMode="decimal"
+          value={item.unitPrice}
+          onChange={(e) => onChange(item.key, "unitPrice", e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Cena celkem</span>
+        <Input
+          inputMode="decimal"
+          value={item.totalPrice}
+          onChange={(e) => onChange(item.key, "totalPrice", e.target.value)}
+        />
+      </div>
+      <div className="flex items-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Odstranit položku"
+          disabled={!canRemove}
+          onClick={() => onRemove(item.key)}
+        >
+          <Trash2 />
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 function emptyItem(): DraftItem {
   return {
@@ -158,7 +234,8 @@ export function ReceiptForm({
   const action = isEdit ? updateReceiptAction : createReceiptAction;
   const [state, formAction, pending] = useActionState(action, initial);
   const [vendor, setVendor] = useState(initialReceipt?.vendor ?? "");
-  const [totalAmount, setTotalAmount] = useState(
+  // Ručně zadaná částka. Dokud ji uživatel nepřepíše, řídí se součtem položek.
+  const [manualTotal, setManualTotal] = useState(
     initialReceipt ? String(initialReceipt.totalAmount) : ""
   );
   const [totalManual, setTotalManual] = useState(Boolean(initialReceipt));
@@ -194,6 +271,11 @@ export function ReceiptForm({
   const computedItems = useMemo(() => draftsToItems(items), [items]);
   const itemsTotal = useMemo(() => itemsSum(computedItems), [computedItems]);
 
+  // Odvozeno při renderu, ne efektem — jinak každý stisk klávesy v položkách
+  // vyvolal druhé překreslení celého formuláře.
+  const totalAmount =
+    !totalManual && computedItems.length > 0 ? String(itemsTotal) : manualTotal;
+
   const duplicateMatch = useMemo(() => {
     const amount = Number(String(totalAmount).replace(",", "."));
     if (!vendor.trim() || !Number.isFinite(amount)) return null;
@@ -208,15 +290,9 @@ export function ReceiptForm({
     );
   }, [vendor, totalAmount, purchasedAt, existingReceipts, initialReceipt?.id]);
 
-  useEffect(() => {
-    if (!totalManual && computedItems.length > 0) {
-      setTotalAmount(String(itemsTotal));
-    }
-  }, [itemsTotal, computedItems.length, totalManual]);
-
   function resetCreateForm() {
     setVendor("");
-    setTotalAmount("");
+    setManualTotal("");
     setTotalManual(false);
     setPurchasedAt(toDatetimeLocalValue(new Date()));
     setItems([emptyItem()]);
@@ -241,46 +317,76 @@ export function ReceiptForm({
     onSaved?.();
   }, [pending, state.success, isEdit, onSaved, router]);
 
-  function removeItem(key: string) {
+  // Stabilní identita, jinak by memo na řádcích nemělo smysl.
+  const removeItem = useCallback((key: string) => {
+    setTotalManual(false);
     setItems((prev) => {
       const next = prev.filter((row) => row.key !== key);
-      const remaining = next.length > 0 ? next : [emptyItem()];
-      const sum = itemsSum(draftsToItems(remaining));
-      setTotalAmount(String(sum));
-      setTotalManual(false);
-      return remaining;
+      return next.length > 0 ? next : [emptyItem()];
     });
-  }
+  }, []);
 
-  function updateItem(
-    key: string,
-    field: keyof Omit<DraftItem, "key">,
-    value: string
-  ) {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.key !== key) return item;
-        const next = { ...item, [field]: value };
+  const updateItem = useCallback(
+    (key: string, field: keyof Omit<DraftItem, "key">, value: string) => {
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.key !== key) return item;
+          const next = { ...item, [field]: value };
 
-        if (field === "quantity" || field === "unitPrice") {
-          const qty = parseDraftDecimal(next.quantity, 1);
-          const unit = parseDraftDecimal(next.unitPrice, Number.NaN);
-          if (Number.isFinite(qty) && qty > 0 && Number.isFinite(unit)) {
-            next.totalPrice = String(Math.round(qty * unit * 100) / 100);
+          if (field === "quantity" || field === "unitPrice") {
+            const qty = parseDraftDecimal(next.quantity, 1);
+            const unit = parseDraftDecimal(next.unitPrice, Number.NaN);
+            if (Number.isFinite(qty) && qty > 0 && Number.isFinite(unit)) {
+              next.totalPrice = String(Math.round(qty * unit * 100) / 100);
+            }
           }
-        }
 
-        if (field === "totalPrice") {
-          const qty = parseDraftDecimal(next.quantity, 1);
-          const total = parseDraftDecimal(next.totalPrice, Number.NaN);
-          if (Number.isFinite(qty) && qty > 0 && Number.isFinite(total)) {
-            next.unitPrice = String(Math.round((total / qty) * 100) / 100);
+          if (field === "totalPrice") {
+            const qty = parseDraftDecimal(next.quantity, 1);
+            const total = parseDraftDecimal(next.totalPrice, Number.NaN);
+            if (Number.isFinite(qty) && qty > 0 && Number.isFinite(total)) {
+              next.unitPrice = String(Math.round((total / qty) * 100) / 100);
+            }
           }
-        }
 
-        return next;
-      })
-    );
+          return next;
+        })
+      );
+    },
+    []
+  );
+
+  /** Záloha, když doklad neprojde přes OCR route (limit velikosti, výpadek). */
+  async function uploadToStorage(file: File) {
+    setImageUploading(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) throw new Error("Nejste přihlášeni.");
+
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("receipts")
+        .upload(path, file, {
+          upsert: false,
+          contentType: file.type || undefined,
+        });
+      if (error) throw new Error(error.message);
+
+      setImageUrl(
+        supabase.storage.from("receipts").getPublicUrl(path).data.publicUrl
+      );
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? `Fotku se nepodařilo nahrát: ${err.message}`
+          : "Fotku se nepodařilo nahrát."
+      );
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   async function handleFile(file: File) {
@@ -289,75 +395,38 @@ export function ReceiptForm({
     setAnalysisAnimationActive(false);
     setOcrLoading(true);
     try {
-      const supabase = createClient();
+      const prepared = await prepareReceiptFile(file);
+      // Orb se rozhýbe až po kompresi, když už běží jen síť.
+      setAnalysisAnimationActive(true);
 
-      // OCR varianta + lokální session paralelně. Autoritu dál ověřuje API
-      // a Storage RLS; tady potřebujeme jen ID pro cestu objektu.
-      const [prepared, sessionResult] = await Promise.all([
-        prepareImagesForReceipt(file),
-        supabase.auth.getSession(),
-      ]);
-
-      const user = sessionResult.data.session?.user;
-      if (!user) throw new Error("Nejste přihlášeni.");
-
-      // Soubor nad limit serverless funkce by skončil na 413 ještě před
-      // route handlerem — doklad pak jen nahrajeme a necháme vyplnit ručně.
-      const ocrTooLarge = prepared.ocr.size > OCR_MAX_BYTES;
-
-      // Surové tělo místo multipartu — méně bajtů i práce na obou stranách.
-      const ocrPromise = ocrTooLarge
-        ? null
-        : fetch("/api/ocr", {
-            method: "POST",
-            headers: { "Content-Type": prepared.ocr.type || "image/jpeg" },
-            body: prepared.ocr,
-          });
-
-      // Upload do Storage běží na pozadí — na výsledky OCR se nečeká.
-      setImageUploading(true);
-      void prepared.upload
-        .then(async (uploadFile) => {
-          const ext =
-            uploadFile.name.split(".").pop() ||
-            (uploadFile.type === "image/jpeg" ? "jpg" : "bin");
-          const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-          const uploadRequest = supabase.storage
-            .from("receipts")
-            .upload(path, uploadFile, {
-              upsert: false,
-              contentType: uploadFile.type || undefined,
-            });
-          // Kvalitní orb se rozhýbe až po kompresi, když už běží jen síť.
-          setAnalysisAnimationActive(true);
-          const { error } = await uploadRequest;
-          if (error) throw new Error(error.message);
-
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("receipts").getPublicUrl(path);
-          setImageUrl(publicUrl);
-        })
-        .catch((err) => {
-          setUploadError(
-            err instanceof Error
-              ? `Fotku se nepodařilo nahrát: ${err.message}`
-              : "Fotku se nepodařilo nahrát."
-          );
-        })
-        .finally(() => setImageUploading(false));
-
-      const ocrRes = await ocrPromise;
-
-      if (!ocrRes) {
+      // Nad limit serverless funkce by požadavek skončil na 413 ještě před
+      // route handlerem — doklad tedy jen nahrajeme a necháme vyplnit ručně.
+      if (prepared.size > OCR_MAX_BYTES) {
+        await uploadToStorage(prepared);
         setOcrWarning(
           "Soubor je moc velký na automatické čtení. Doklad je nahraný — částku a položky prosím vyplňte ručně."
         );
         return;
       }
 
-      // Chyby brány (413, 504) nevrací JSON — nesmí shodit už hotový upload.
-      const json = await ocrRes.json().catch(() => ({}) as { error?: string });
+      // Surové tělo místo multipartu — méně bajtů i práce na obou stranách.
+      // Route obrázek rovnou uloží do Storage, takže mobil posílá data jednou.
+      const ocrRes = await fetch("/api/ocr", {
+        method: "POST",
+        headers: { "Content-Type": prepared.type || "image/jpeg" },
+        body: prepared,
+      });
+
+      // Chyby brány (413, 504) nevrací JSON.
+      const json = await ocrRes
+        .json()
+        .catch(() => ({}) as { error?: string; imageUrl?: string });
+
+      if (json.imageUrl) {
+        setImageUrl(json.imageUrl);
+      } else {
+        await uploadToStorage(prepared);
+      }
 
       if (!ocrRes.ok) {
         setOcrWarning(
@@ -377,15 +446,16 @@ export function ReceiptForm({
       if (Array.isArray(json.items) && json.items.length > 0) {
         const draftItems = toDraft(normalizeReceiptItems(json.items));
         setItems(draftItems);
-        setTotalManual(false);
+        // Nulový součet položek → drž se celkové částky z dokladu.
         const sum = itemsSum(draftsToItems(draftItems));
-        if (sum !== 0 || computedItems.length > 0) {
-          setTotalAmount(String(sum));
-        } else if (json.totalAmount != null) {
-          setTotalAmount(String(json.totalAmount));
+        if (sum === 0 && json.totalAmount != null) {
+          setManualTotal(String(json.totalAmount));
+          setTotalManual(true);
+        } else {
+          setTotalManual(false);
         }
       } else if (json.totalAmount != null) {
-        setTotalAmount(String(json.totalAmount));
+        setManualTotal(String(json.totalAmount));
         setTotalManual(true);
       }
     } catch (err) {
@@ -425,7 +495,11 @@ export function ReceiptForm({
             disabled={ocrLoading}
             aria-busy={ocrLoading || undefined}
             aria-label={ocrLoading ? "Analyzuji doklad" : undefined}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => {
+              // Výběr fotky trvá pár vteřin — mezitím naběhne funkce i TLS.
+              void fetch("/api/ocr", { method: "GET" }).catch(() => {});
+              fileRef.current?.click();
+            }}
           >
             {ocrLoading ? (
               <ReceiptAnalysisStatus active={analysisAnimationActive} />
@@ -499,7 +573,7 @@ export function ReceiptForm({
           value={totalAmount}
           onChange={(e) => {
             setTotalManual(true);
-            setTotalAmount(e.target.value);
+            setManualTotal(e.target.value);
           }}
           placeholder="1250.50"
         />
@@ -548,63 +622,14 @@ export function ReceiptForm({
 
         <div className="flex flex-col gap-3">
           {items.map((item, index) => (
-            <div
+            <ItemRow
               key={item.key}
-              className="grid gap-2 rounded-xl bg-muted/40 p-3 ring-1 ring-foreground/5 sm:grid-cols-[1.4fr_0.7fr_0.9fr_0.9fr_auto]"
-            >
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">
-                  Název {index + 1}
-                </span>
-                <Input
-                  value={item.name}
-                  onChange={(e) => updateItem(item.key, "name", e.target.value)}
-                  placeholder="Káva"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Počet</span>
-                <Input
-                  inputMode="decimal"
-                  value={item.quantity}
-                  onChange={(e) =>
-                    updateItem(item.key, "quantity", e.target.value)
-                  }
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Cena / ks</span>
-                <Input
-                  inputMode="decimal"
-                  value={item.unitPrice}
-                  onChange={(e) =>
-                    updateItem(item.key, "unitPrice", e.target.value)
-                  }
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Cena celkem</span>
-                <Input
-                  inputMode="decimal"
-                  value={item.totalPrice}
-                  onChange={(e) =>
-                    updateItem(item.key, "totalPrice", e.target.value)
-                  }
-                />
-              </div>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Odstranit položku"
-                  disabled={items.length <= 1 && !items[0]?.name.trim()}
-                  onClick={() => removeItem(item.key)}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </div>
+              item={item}
+              index={index}
+              canRemove={items.length > 1 || Boolean(items[0]?.name.trim())}
+              onChange={updateItem}
+              onRemove={removeItem}
+            />
           ))}
         </div>
       </div>

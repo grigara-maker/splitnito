@@ -30,6 +30,38 @@ export const maxDuration = 60;
 
 type UploadedImage = { buffer: Buffer; mimeType: string } | { error: string };
 
+const EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "application/pdf": "pdf",
+};
+
+/**
+ * Doklad ukládáme tady, ne z prohlížeče: mobil tak posílá bajty jednou místo
+ * dvakrát a zápis do Storage jde ze stejného regionu jako databáze. Běží
+ * souběžně s Gemini, takže se schová za dobu inference.
+ */
+async function storeReceiptImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<string | null> {
+  try {
+    const ext = EXTENSIONS[mimeType] ?? "bin";
+    const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage
+      .from("receipts")
+      .upload(path, buffer, { contentType: mimeType, upsert: false });
+    if (error) return null;
+    return supabase.storage.from("receipts").getPublicUrl(path).data.publicUrl;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Klient posílá obrázek jako surové tělo — odpadá skládání i parsování
  * multipartu. Starší otevřená záložka může poslat FormData, proto fallback.
@@ -71,6 +103,21 @@ const GEMINI_MODELS = [
   "gemini-3.5-flash",
 ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
 
+/**
+ * Model, který naposledy odpověděl. Teplá instance díky tomu nezkouší znovu
+ * modely, které mezitím zmizely nebo vyčerpaly kvótu — každý takový pokus je
+ * jedno zbytečné kolo k Google a stojí stovky milisekund.
+ */
+let preferredModel: string | null = null;
+
+function modelOrder(): string[] {
+  if (!preferredModel) return GEMINI_MODELS;
+  return [
+    preferredModel,
+    ...GEMINI_MODELS.filter((m) => m !== preferredModel),
+  ];
+}
+
 function isModelUnavailable(status: number, body: string): boolean {
   if (status === 404) return true;
   return /no longer available|not found|not supported for|is not found/i.test(
@@ -87,6 +134,14 @@ function shouldTryNextModel(status: number, body: string): boolean {
   }
   // Jakákoli jiná chyba API — zkus další model (limity, region, …)
   return status >= 400;
+}
+
+/**
+ * Předehřátí — klient sem sáhne, jakmile uživatel otevře výběr souboru.
+ * Než fotku vybere, je instance teplá a TLS spojení navázané.
+ */
+export function GET() {
+  return new Response(null, { status: 204 });
 }
 
 export async function POST(request: Request) {
@@ -126,7 +181,18 @@ export async function POST(request: Request) {
     );
   }
 
+  const storedImage = storeReceiptImage(supabase, user.id, buffer, mimeType);
   const base64 = buffer.toString("base64");
+
+  // Obrázek je uložený i když OCR selže — doklad pak jde doplnit ručně.
+  const respond = async (
+    body: Record<string, unknown>,
+    status?: number
+  ): Promise<NextResponse> =>
+    NextResponse.json(
+      { ...body, imageUrl: await storedImage },
+      status ? { status } : undefined
+    );
 
   const prompt = `Extract receipt/invoice data (CZ or international, incl. TEMU/Amazon). Reply ONLY with JSON:
 {"vendor":string|null,"totalAmount":number|null,"purchasedAt":string|null,"items":[{"name":string,"quantity":number,"unitPrice":number,"totalPrice":number}]}
@@ -177,7 +243,7 @@ Rules:
   const attempted: string[] = [];
   const attemptErrors: string[] = [];
 
-  for (const model of GEMINI_MODELS) {
+  for (const model of modelOrder()) {
     attempted.push(model);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -210,6 +276,7 @@ Rules:
         );
         if (data && hasText) {
           usedModel = model;
+          preferredModel = model;
           break;
         }
         data = null;
@@ -254,23 +321,23 @@ Rules:
   if (!data || !usedModel) {
     const tried = attempted.join(", ");
     if (lastStatus === 429) {
-      return NextResponse.json(
+      return respond(
         {
           error: `OCR: všechny Gemini modely odmítly požadavek (limit / kvóta). Zkoušeno: ${tried}. Zkuste to za chvíli, nebo doklad vyplňte ručně.`,
           code: "QUOTA_EXCEEDED",
           attempted,
           attemptErrors,
         },
-        { status: 429 }
+        429
       );
     }
-    return NextResponse.json(
+    return respond(
       {
         error: `Gemini API chyba (zkoušeno: ${tried}): ${lastStatus} ${lastText.slice(0, 220)}`,
         attempted,
         attemptErrors,
       },
-      { status: 502 }
+      502
     );
   }
 
@@ -280,10 +347,7 @@ Rules:
     .trim();
 
   if (!rawText) {
-    return NextResponse.json(
-      { error: "Gemini nevrátil žádný výsledek OCR." },
-      { status: 502 }
-    );
+    return respond({ error: "Gemini nevrátil žádný výsledek OCR." }, 502);
   }
 
   let parsed: OcrResult;
@@ -294,10 +358,7 @@ Rules:
       .trim();
     parsed = JSON.parse(jsonText) as OcrResult;
   } catch {
-    return NextResponse.json(
-      { error: "Nepodařilo se zpracovat odpověď z Gemini." },
-      { status: 502 }
-    );
+    return respond({ error: "Nepodařilo se zpracovat odpověď z Gemini." }, 502);
   }
 
   const vendor =
@@ -329,10 +390,5 @@ Rules:
     purchasedAt = parseReceiptPurchasedAt(parsed.purchasedAt);
   }
 
-  return NextResponse.json({
-    vendor,
-    totalAmount,
-    purchasedAt,
-    items,
-  });
+  return respond({ vendor, totalAmount, purchasedAt, items });
 }
