@@ -26,12 +26,38 @@ const UPLOAD_MAX_EDGE = 1800;
 const UPLOAD_QUALITY = 0.84;
 const UPLOAD_SKIP_UNDER_BYTES = 700_000;
 
-function toJpegFile(blob: Blob, originalName: string): File {
-  const base = originalName.replace(/\.[^.]+$/, "") || "receipt";
-  return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+let webpEncodingSupport: boolean | null = null;
+
+/**
+ * WebP je při stejné kvalitě zhruba o třetinu menší než JPEG, takže se
+ * znatelně zkrátí upload z mobilu i inference nad obrázkem. Starší Safari
+ * ho ale neumí zakódovat — tam se tiše vrátíme k JPEGu.
+ */
+function encodeMimeType(): "image/webp" | "image/jpeg" {
+  if (webpEncodingSupport == null) {
+    try {
+      const probe = document.createElement("canvas");
+      probe.width = 1;
+      probe.height = 1;
+      webpEncodingSupport = probe
+        .toDataURL("image/webp")
+        .startsWith("data:image/webp");
+    } catch {
+      webpEncodingSupport = false;
+    }
+  }
+  return webpEncodingSupport ? "image/webp" : "image/jpeg";
 }
 
-async function renderJpeg(
+function toImageFile(blob: Blob, originalName: string): File {
+  const base = originalName.replace(/\.[^.]+$/, "") || "receipt";
+  const ext = blob.type === "image/webp" ? "webp" : "jpg";
+  return new File([blob], `${base}.${ext}`, {
+    type: blob.type || "image/jpeg",
+  });
+}
+
+async function renderCompressed(
   bitmap: ImageBitmap,
   maxEdge: number,
   quality: number
@@ -46,7 +72,7 @@ async function renderJpeg(
   if (!ctx) return null;
   ctx.drawImage(bitmap, 0, 0, width, height);
   return new Promise((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", quality);
+    canvas.toBlob(resolve, encodeMimeType(), quality);
   });
 }
 
@@ -75,12 +101,12 @@ async function compressImage(
       return file;
     }
 
-    const blob = await renderJpeg(bitmap, maxEdge, quality);
+    const blob = await renderCompressed(bitmap, maxEdge, quality);
     bitmap.close();
     if (!blob || blob.size >= file.size) {
       return file;
     }
-    return toJpegFile(blob, file.name);
+    return toImageFile(blob, file.name);
   } catch {
     return file;
   }
@@ -93,9 +119,9 @@ async function shrinkUnderOcrLimit(
   let result = current;
   for (const step of OCR_FALLBACK_STEPS) {
     if (result.size <= OCR_MAX_BYTES) break;
-    const blob = await renderJpeg(bitmap, step.maxEdge, step.quality);
+    const blob = await renderCompressed(bitmap, step.maxEdge, step.quality);
     if (blob && blob.size < result.size) {
-      result = toJpegFile(blob, current.name);
+      result = toImageFile(blob, current.name);
     }
   }
   return result;
@@ -148,9 +174,9 @@ async function prepareUploadFromBitmap(
       return ocr;
     }
 
-    const blob = await renderJpeg(bitmap, UPLOAD_MAX_EDGE, UPLOAD_QUALITY);
+    const blob = await renderCompressed(bitmap, UPLOAD_MAX_EDGE, UPLOAD_QUALITY);
     if (blob && blob.size < file.size) {
-      return toJpegFile(blob, file.name);
+      return toImageFile(blob, file.name);
     }
     return file;
   } catch {
@@ -186,9 +212,9 @@ export async function prepareImagesForReceipt(
     if (needsOcr) {
       const ocrScale = Math.min(1, OCR_MAX_EDGE / maxDim);
       if (!(ocrScale >= 0.92 && file.size < OCR_SKIP_UNDER_BYTES * 2)) {
-        const blob = await renderJpeg(bitmap, OCR_MAX_EDGE, OCR_QUALITY);
+        const blob = await renderCompressed(bitmap, OCR_MAX_EDGE, OCR_QUALITY);
         if (blob && blob.size < file.size) {
-          ocr = toJpegFile(blob, file.name);
+          ocr = toImageFile(blob, file.name);
         }
       }
       if (ocr.size > OCR_MAX_BYTES) {

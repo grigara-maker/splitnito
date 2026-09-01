@@ -24,6 +24,39 @@ type GeminiResponse = {
   }>;
 };
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+type UploadedImage = { buffer: Buffer; mimeType: string } | { error: string };
+
+/**
+ * Klient posílá obrázek jako surové tělo — odpadá skládání i parsování
+ * multipartu. Starší otevřená záložka může poslat FormData, proto fallback.
+ */
+async function readUpload(request: Request): Promise<UploadedImage> {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (contentType.startsWith("multipart/form-data")) {
+    const formData = await request.formData();
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return { error: "Chybí soubor." };
+    }
+    return {
+      buffer: Buffer.from(await file.arrayBuffer()),
+      mimeType: file.type || "image/jpeg",
+    };
+  }
+
+  const mimeType = contentType.split(";")[0]?.trim() || "image/jpeg";
+  const buffer = Buffer.from(await request.arrayBuffer());
+  if (buffer.byteLength === 0) {
+    return { error: "Chybí soubor." };
+  }
+  return { buffer, mimeType };
+}
+
 /**
  * Pořadí OCR modelů (první = preferovaný).
  * Flash-Lite první = nejrychlejší pro extrakci z dokladů (~350 tok/s).
@@ -60,10 +93,10 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const apiKey = process.env.GEMINI_API_KEY;
 
-  // Auth + formData paralelně (ušetří ~50–150 ms)
-  const [userResult, formData] = await Promise.all([
+  // Ověření session běží souběžně s příjmem těla požadavku.
+  const [userResult, upload] = await Promise.all([
     supabase.auth.getUser(),
-    request.formData(),
+    readUpload(request),
   ]);
 
   const user = userResult.data.user;
@@ -81,13 +114,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const file = formData.get("file");
-
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Chybí soubor." }, { status: 400 });
+  if ("error" in upload) {
+    return NextResponse.json({ error: upload.error }, { status: 400 });
   }
 
-  const mimeType = file.type || "image/jpeg";
+  const { buffer, mimeType } = upload;
   if (!mimeType.startsWith("image/") && mimeType !== "application/pdf") {
     return NextResponse.json(
       { error: "Podporované jsou obrázky a PDF." },
@@ -95,7 +126,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = buffer.toString("base64");
 
   const prompt = `Extract receipt/invoice data (CZ or international, incl. TEMU/Amazon). Reply ONLY with JSON:

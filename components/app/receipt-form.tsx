@@ -183,6 +183,7 @@ export function ReceiptForm({
   );
   const [imageUrl, setImageUrl] = useState(initialReceipt?.imageUrl ?? "");
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [analysisAnimationActive, setAnalysisAnimationActive] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
@@ -220,6 +221,7 @@ export function ReceiptForm({
     setPurchasedAt(toDatetimeLocalValue(new Date()));
     setItems([emptyItem()]);
     setImageUrl("");
+    setImageUploading(false);
     setOcrWarning(null);
     setUploadError(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -303,43 +305,49 @@ export function ReceiptForm({
       // route handlerem — doklad pak jen nahrajeme a necháme vyplnit ručně.
       const ocrTooLarge = prepared.ocr.size > OCR_MAX_BYTES;
 
-      const ocrBody = new FormData();
-      ocrBody.append("file", prepared.ocr);
-
-      // OCR síť začne hned; větší Storage JPEG se mezitím dokončí a nahraje.
+      // Surové tělo místo multipartu — méně bajtů i práce na obou stranách.
       const ocrPromise = ocrTooLarge
         ? null
-        : fetch("/api/ocr", { method: "POST", body: ocrBody });
-      const uploadPromise = prepared.upload.then(async (uploadFile) => {
-        const ext =
-          uploadFile.name.split(".").pop() ||
-          (uploadFile.type === "image/jpeg" ? "jpg" : "bin");
-        const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-        const uploadRequest = supabase.storage
-          .from("receipts")
-          .upload(path, uploadFile, {
-            upsert: false,
-            contentType: uploadFile.type || undefined,
+        : fetch("/api/ocr", {
+            method: "POST",
+            headers: { "Content-Type": prepared.ocr.type || "image/jpeg" },
+            body: prepared.ocr,
           });
-        // Kvalitní orb se rozhýbe až po kompresi, když už běží jen síť.
-        setAnalysisAnimationActive(true);
-        const uploadResult = await uploadRequest;
-        return { uploadResult, path };
-      });
 
-      const [{ uploadResult, path }, ocrRes] = await Promise.all([
-        uploadPromise,
-        ocrPromise,
-      ]);
+      // Upload do Storage běží na pozadí — na výsledky OCR se nečeká.
+      setImageUploading(true);
+      void prepared.upload
+        .then(async (uploadFile) => {
+          const ext =
+            uploadFile.name.split(".").pop() ||
+            (uploadFile.type === "image/jpeg" ? "jpg" : "bin");
+          const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+          const uploadRequest = supabase.storage
+            .from("receipts")
+            .upload(path, uploadFile, {
+              upsert: false,
+              contentType: uploadFile.type || undefined,
+            });
+          // Kvalitní orb se rozhýbe až po kompresi, když už běží jen síť.
+          setAnalysisAnimationActive(true);
+          const { error } = await uploadRequest;
+          if (error) throw new Error(error.message);
 
-      if (uploadResult.error) {
-        throw new Error(uploadResult.error.message);
-      }
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("receipts").getPublicUrl(path);
+          setImageUrl(publicUrl);
+        })
+        .catch((err) => {
+          setUploadError(
+            err instanceof Error
+              ? `Fotku se nepodařilo nahrát: ${err.message}`
+              : "Fotku se nepodařilo nahrát."
+          );
+        })
+        .finally(() => setImageUploading(false));
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("receipts").getPublicUrl(path);
-      setImageUrl(publicUrl);
+      const ocrRes = await ocrPromise;
 
       if (!ocrRes) {
         setOcrWarning(
@@ -428,7 +436,11 @@ export function ReceiptForm({
               </>
             )}
           </Button>
-          {imageUrl ? (
+          {imageUploading ? (
+            <span className="text-xs text-muted-foreground">
+              Fotka se nahrává…
+            </span>
+          ) : imageUrl ? (
             <span className="text-xs text-muted-foreground">Obrázek nahrán</span>
           ) : null}
         </div>
@@ -608,7 +620,8 @@ export function ReceiptForm({
         </p>
       ) : null}
 
-      <Button type="submit" loading={pending || ocrLoading}>
+      {/* Uložení počká na dokončený upload, ať se doklad neuloží bez fotky. */}
+      <Button type="submit" loading={pending || ocrLoading || imageUploading}>
         {isEdit ? "Uložit změny" : "Uložit doklad"}
       </Button>
     </form>
