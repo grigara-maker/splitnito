@@ -138,6 +138,7 @@ export async function updateProfileAction(
 ): Promise<AuthState> {
   const name = String(formData.get("name") ?? "").trim();
   const ibanRaw = String(formData.get("iban") ?? "").trim();
+  const dailyReminders = formData.get("dailyEmailReminders") === "on";
 
   if (!name) {
     return { error: "Jméno je povinné." };
@@ -178,7 +179,11 @@ export async function updateProfileAction(
 
   const { error } = await supabase
     .from("profiles")
-    .update({ name, iban })
+    .update({
+      name,
+      iban,
+      daily_email_reminders: dailyReminders,
+    })
     .eq("id", user.id);
 
   if (error) {

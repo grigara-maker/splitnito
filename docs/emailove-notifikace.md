@@ -16,7 +16,10 @@ potřeba nastavit.
 3. **Potvrzení příjemcem** — jakmile plátce označí platbu, příjemce dostane
    e-mail „bylo vám zaplaceno“ s tlačítkem **Peníze dorazily**.
 4. **Připomínky** — každých 24 hodin se rozešle připomínka všem, kdo ještě
-   nepotvrdili svůj krok. Běží to, dokud se akce nedoklikne.
+   nepotvrdili svůj krok (platba nebo potvrzení přijetí). Denní upomínky si
+   každý uživatel může vypnout v **Profilu**. Po **7 dnech** od první výzvy
+   ale přijde jedna povinná upomínka vždy — tu vypnout nelze. Běží to, dokud
+   se akce nedoklikne.
 5. **Souhrn** — po potvrzení poslední platby dostanou všichni (účastníci i
    správce firmy) souhrnný e-mail: náklady akce, rozpis podle lidí, provedené
    platby a celkový součet za všechny uzavřené akce.
@@ -31,6 +34,10 @@ je zrcadlem `auth.users.email` a drží ho v synchronizaci databázový trigger.
 V Supabase → SQL Editor spusťte `supabase/migration_email_notifications.sql`.
 Přidá e-mail na profil, přepínač `events.notify_emails` a tabulku
 `email_notifications` (log odeslaných zpráv + rozvrh připomínek).
+
+Pro vypínatelné denní upomínky spusťte i
+`supabase/migration_daily_reminders.sql` (sloupec
+`profiles.daily_email_reminders`, default `true`).
 
 **Bez téhle migrace se detail akce nenačte** — kód počítá s novými sloupci.
 

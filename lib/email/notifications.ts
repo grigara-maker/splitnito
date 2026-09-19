@@ -15,15 +15,18 @@ import {
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { EmailNotificationKind } from "@/lib/types/database";
 
-/** Interval mezi připomínkami; tolerance kryje drift cronu. */
+/** Interval mezi denními připomínkami; tolerance kryje drift cronu. */
 const REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const REMINDER_TOLERANCE_MS = 60 * 60 * 1000;
+/** Povinná upomínka po týdnu — nejde vypnout v nastavení. */
+const WEEKLY_FORCE_REMINDER_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Recipient = {
   id: string;
   name: string;
   email: string | null;
   iban: string | null;
+  dailyEmailReminders: boolean;
 };
 
 type EventContext = {
@@ -91,7 +94,7 @@ async function loadEventContext(
         .maybeSingle(),
       admin
         .from("profiles")
-        .select("id, name, email, iban")
+        .select("id, name, email, iban, daily_email_reminders")
         .eq("company_id", event.company_id),
     ]);
 
@@ -108,7 +111,13 @@ async function loadEventContext(
     recipients: new Map(
       (profiles ?? []).map((p) => [
         p.id,
-        { id: p.id, name: p.name, email: p.email, iban: p.iban },
+        {
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          iban: p.iban,
+          dailyEmailReminders: p.daily_email_reminders !== false,
+        },
       ])
     ),
   };
@@ -141,7 +150,13 @@ async function logNotification(
   });
 }
 
-/** Kolikrát a kdy naposledy jsme danou notifikaci úspěšně poslali. */
+type NotificationHistory = {
+  count: number;
+  lastSentAt: number | null;
+  firstSentAt: number | null;
+};
+
+/** Kolikrát a kdy naposledy / poprvé jsme danou notifikaci úspěšně poslali. */
 async function notificationHistory(
   admin: Admin,
   params: {
@@ -150,7 +165,7 @@ async function notificationHistory(
     transferId?: string | null;
     recipientId?: string | null;
   }
-): Promise<{ count: number; lastSentAt: number | null }> {
+): Promise<NotificationHistory> {
   let query = admin
     .from("email_notifications")
     .select("created_at")
@@ -164,30 +179,62 @@ async function notificationHistory(
 
   const { data } = await query;
   const rows = data ?? [];
+  const last = rows[0] ? new Date(rows[0].created_at).getTime() : null;
+  const first = rows.length
+    ? new Date(rows[rows.length - 1].created_at).getTime()
+    : null;
   return {
     count: rows.length,
-    lastSentAt: rows[0] ? new Date(rows[0].created_at).getTime() : null,
+    lastSentAt: last,
+    firstSentAt: first,
   };
 }
 
 /**
- * `initial` = jen první odeslání, `reminder` = jen připomínka po 24 h,
+ * `initial` = jen první odeslání, `reminder` = jen připomínka,
  * `any` = ruční rozeslání, které zvládne obojí.
  */
 type SendMode = "initial" | "reminder" | "any";
 
-function shouldSend(
-  mode: SendMode,
-  history: { count: number; lastSentAt: number | null }
-): boolean {
-  const due =
+function isDailyDue(history: NotificationHistory): boolean {
+  return (
     history.lastSentAt == null ||
     Date.now() - history.lastSentAt >=
-      REMINDER_INTERVAL_MS - REMINDER_TOLERANCE_MS;
+      REMINDER_INTERVAL_MS - REMINDER_TOLERANCE_MS
+  );
+}
 
+/**
+ * Povinná týdenní upomínka: 7+ dní od první výzvy a ještě jsme
+ * neodeslali nic po uplynutí týdne.
+ */
+function isWeeklyForceDue(history: NotificationHistory): boolean {
+  if (!history.firstSentAt || !history.lastSentAt) return false;
+  const weekMark =
+    history.firstSentAt + WEEKLY_FORCE_REMINDER_MS - REMINDER_TOLERANCE_MS;
+  return Date.now() >= weekMark && history.lastSentAt < weekMark;
+}
+
+function shouldSendReminder(
+  history: NotificationHistory,
+  dailyEnabled: boolean
+): boolean {
+  if (history.count === 0) return false;
+  if (dailyEnabled) return isDailyDue(history);
+  return isWeeklyForceDue(history);
+}
+
+function shouldSend(
+  mode: SendMode,
+  history: NotificationHistory,
+  dailyEnabled: boolean
+): boolean {
   if (mode === "initial") return history.count === 0;
-  if (mode === "reminder") return history.count > 0 && due;
-  return history.count === 0 || due;
+  if (mode === "reminder") return shouldSendReminder(history, dailyEnabled);
+  // Ruční „rozeslat znovu“: první e-mail vždy, další po 24 h (bez ohledu
+  // na denní preferenci — správce to spouští záměrně).
+  if (history.count === 0) return true;
+  return isDailyDue(history);
 }
 
 async function deliver(
@@ -247,7 +294,9 @@ async function sendPaymentRequest(
     recipientId: debtor.id,
   });
 
-  if (!shouldSend(mode, history)) return { sent: 0, skipped: 1, failed: 0 };
+  if (!shouldSend(mode, history, debtor.dailyEmailReminders)) {
+    return { sent: 0, skipped: 1, failed: 0 };
+  }
 
   const paymentMessage = paymentMessageFor(
     context.companyName,
@@ -278,6 +327,7 @@ async function sendPaymentRequest(
     }),
     eventUrl: eventUrl(context.eventId),
     reminderIndex: history.count,
+    dailyReminders: debtor.dailyEmailReminders,
   });
 
   return deliver(admin, context, {
@@ -305,7 +355,9 @@ async function sendPaymentReceived(
     recipientId: creditor.id,
   });
 
-  if (!shouldSend(mode, history)) return { sent: 0, skipped: 1, failed: 0 };
+  if (!shouldSend(mode, history, creditor.dailyEmailReminders)) {
+    return { sent: 0, skipped: 1, failed: 0 };
+  }
 
   const email = paymentReceivedEmail({
     recipientName: creditor.name,
@@ -321,6 +373,7 @@ async function sendPaymentReceived(
     }),
     eventUrl: eventUrl(context.eventId),
     reminderIndex: history.count,
+    dailyReminders: creditor.dailyEmailReminders,
   });
 
   return deliver(admin, context, {

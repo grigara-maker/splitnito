@@ -15,7 +15,7 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, iban, company_id, role")
+    .select("name, iban, company_id, role, daily_email_reminders")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -41,12 +41,13 @@ export default async function ProfilePage() {
           Profil
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Upravte jméno a IBAN pro QR platby mezi uživateli.
+          Upravte jméno, IBAN a upomínky e-mailů pro QR platby.
         </p>
       </div>
       <ProfileForm
         name={profile.name}
         iban={profile.iban}
+        dailyEmailReminders={profile.daily_email_reminders !== false}
         inviteCode={company?.invite_code ?? "—"}
         companyName={company?.name ?? "—"}
       />

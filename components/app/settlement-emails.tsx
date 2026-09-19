@@ -56,7 +56,7 @@ export function SettlementEmails({
               {allPaid
                 ? "Vyúčtování je vyrovnané — všem stranám odešel souhrn."
                 : notifyEmails
-                  ? "Účastníci dostali e-mail s QR kódem. Připomínku posíláme každých 24 hodin, dokud platbu nepotvrdí."
+                  ? "Účastníci dostali e-mail s QR kódem. Denní připomínky řídí každý ve svém profilu; po 7 dnech přijde jedna povinná upomínka vždy."
                   : "Notifikace k této akci jsou vypnuté — e-maily ani připomínky neodcházejí."}
             </p>
           </div>

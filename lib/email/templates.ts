@@ -26,12 +26,28 @@ function reminderPrefix(reminderIndex: number): string {
   return reminderIndex > 0 ? "Připomínka: " : "";
 }
 
-function reminderNote(reminderIndex: number): string {
+function reminderNote(
+  reminderIndex: number,
+  dailyReminders: boolean
+): string {
   if (reminderIndex <= 0) return "";
+  if (!dailyReminders) {
+    return callout(
+      `Tohle je <strong>týdenní připomínka</strong> — platba pořád není dokončená.`,
+      "warning"
+    );
+  }
   return callout(
     `Tohle je <strong>${reminderIndex}. připomínka</strong>. Další pošleme za 24 hodin — dokud akci nepotvrdíte.`,
     "warning"
   );
+}
+
+function reminderFooter(actionLabel: string, dailyReminders: boolean): string {
+  if (dailyReminders) {
+    return `Připomínku posíláme každých 24 hodin, dokud ${actionLabel}. Denní upomínky můžete vypnout v nastavení profilu ve Splitnito — po týdnu ale přijde jedna povinná.`;
+  }
+  return `Denní upomínky máte vypnuté. Pokud to nevyřešíte, pošleme ještě jednu povinnou připomínku po týdnu.`;
 }
 
 /** 1) Dlužníkovi: „zaplať tuhle částku“ + QR + tlačítko. */
@@ -47,7 +63,9 @@ export function paymentRequestEmail(params: {
   actionUrl: string;
   eventUrl: string;
   reminderIndex: number;
+  dailyReminders?: boolean;
 }): RenderedEmail {
+  const dailyReminders = params.dailyReminders !== false;
   const subject = `${reminderPrefix(params.reminderIndex)}Vyúčtování „${params.eventName}“ — máte doplatit ${formatCurrency(params.amount)}`;
 
   const details = detailList([
@@ -76,7 +94,7 @@ export function paymentRequestEmail(params: {
     body: `
 ${heading(`Dobrý den, ${params.recipientName}`)}
 ${paragraph(`Vyúčtování akce <strong>${escapeHtml(params.eventName)}</strong> je uzavřené. Podle rozdělení nákladů máte poslat peníze uživateli <strong>${escapeHtml(params.counterpartyName)}</strong>.`)}
-${reminderNote(params.reminderIndex)}
+${reminderNote(params.reminderIndex, dailyReminders)}
 ${amountBlock("K úhradě", params.amount)}
 ${qr}
 ${details}
@@ -85,8 +103,10 @@ ${button(params.actionUrl, "Zaplaceno — označit platbu")}
 ${divider()}
 ${paragraph(`Stejné tlačítko najdete i <a href="${escapeHtml(params.eventUrl)}" style="color:${t.brand};">v detailu akce ve Splitnito</a>, hned pod QR kódem.`, true)}
 `,
-    footerNote:
-      "Připomínku posíláme každých 24 hodin, dokud platbu neoznačíte jako odeslanou.",
+    footerNote: reminderFooter(
+      "platbu neoznačíte jako odeslanou",
+      dailyReminders
+    ),
   });
 
   const text = [
@@ -116,7 +136,9 @@ export function paymentReceivedEmail(params: {
   actionUrl: string;
   eventUrl: string;
   reminderIndex: number;
+  dailyReminders?: boolean;
 }): RenderedEmail {
+  const dailyReminders = params.dailyReminders !== false;
   const subject = `${reminderPrefix(params.reminderIndex)}${params.counterpartyName} vám poslal/a ${formatCurrency(params.amount)} — potvrďte přijetí`;
 
   const html = renderEmail({
@@ -125,7 +147,7 @@ export function paymentReceivedEmail(params: {
     body: `
 ${heading(`Dobrý den, ${params.recipientName}`)}
 ${paragraph(`<strong>${escapeHtml(params.counterpartyName)}</strong> označil/a platbu za akci <strong>${escapeHtml(params.eventName)}</strong> jako odeslanou.`)}
-${reminderNote(params.reminderIndex)}
+${reminderNote(params.reminderIndex, dailyReminders)}
 ${amountBlock("Odesláno na váš účet", params.amount)}
 ${detailList([
   { label: "Akce", value: params.eventName },
@@ -137,8 +159,10 @@ ${button(params.actionUrl, "Peníze dorazily — potvrdit")}
 ${divider()}
 ${paragraph(`Potvrdit můžete i <a href="${escapeHtml(params.eventUrl)}" style="color:${t.brand};">přímo v detailu akce ve Splitnito</a>.`, true)}
 `,
-    footerNote:
-      "Připomínku posíláme každých 24 hodin, dokud přijetí platby nepotvrdíte.",
+    footerNote: reminderFooter(
+      "přijetí platby nepotvrdíte",
+      dailyReminders
+    ),
   });
 
   const text = [

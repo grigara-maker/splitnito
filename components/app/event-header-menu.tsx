@@ -94,7 +94,7 @@ export function EventHeaderMenu({
         {emailAvailable ? (
           <label className="flex cursor-pointer items-start justify-end gap-2 text-right text-xs text-muted-foreground sm:text-sm">
             <span>
-              Rozeslat e-maily s QR kódem a připomínat každých 24 hodin
+              Rozeslat e-maily s QR kódem
             </span>
             <input
               type="checkbox"

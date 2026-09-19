@@ -43,6 +43,7 @@ export type Database = {
           iban: string | null;
           email: string | null;
           role: "company" | "member";
+          daily_email_reminders: boolean;
           created_at: string;
         };
         Insert: {
@@ -52,6 +53,7 @@ export type Database = {
           iban?: string | null;
           email?: string | null;
           role?: "company" | "member";
+          daily_email_reminders?: boolean;
           created_at?: string;
         };
         Update: {
@@ -61,6 +63,7 @@ export type Database = {
           iban?: string | null;
           email?: string | null;
           role?: "company" | "member";
+          daily_email_reminders?: boolean;
           created_at?: string;
         };
         Relationships: [

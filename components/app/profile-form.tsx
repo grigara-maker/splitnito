@@ -13,11 +13,13 @@ const initial: AuthState = {};
 export function ProfileForm({
   name,
   iban,
+  dailyEmailReminders,
   inviteCode,
   companyName,
 }: {
   name: string;
   iban: string | null;
+  dailyEmailReminders: boolean;
   inviteCode: string;
   companyName: string;
 }) {
@@ -52,6 +54,29 @@ export function ProfileForm({
             IBAN slouží pro QR platby mezi uživateli při uzavření akce.
           </p>
         </div>
+
+        <fieldset className="flex flex-col gap-2 rounded-xl bg-muted/50 p-4 ring-1 ring-foreground/5">
+          <legend className="px-1 text-sm font-medium">E-mailové upomínky</legend>
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              name="dailyEmailReminders"
+              defaultChecked={dailyEmailReminders}
+              className="mt-0.5 size-4 shrink-0 accent-primary"
+            />
+            <span className="flex flex-col gap-1">
+              <span className="text-sm font-medium">
+                Denní upomínky na platbu a potvrzení
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Po uzavření akce vždy přijde e-mail s QR kódem. Když je tahle
+                volba zapnutá, Splitnito připomíná každých 24 hodin. Po sedmi
+                dnech přijde jedna upomínka vždy — tu vypnout nelze.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
         {state.error ? (
           <p className="text-sm text-destructive" role="alert">
             {state.error}
