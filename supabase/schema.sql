@@ -43,6 +43,7 @@ create table if not exists public.receipts (
   total_amount numeric(12, 2) not null check (total_amount >= -99999999.99 and total_amount <= 99999999.99),
   items jsonb,
   image_url text,
+  category text not null default 'expense' check (category in ('expense', 'tax')),
   created_at timestamptz not null default now()
 );
 

@@ -1,9 +1,14 @@
 "use server";
 
+import {
+  normalizeReceiptCategory,
+  type ReceiptCategory,
+} from "@/lib/receipt-category";
 import { createClient } from "@/lib/supabase/server";
 
 export type ArchiveGroupBy = "date" | "vendor" | "user";
 export type ArchiveDateOrder = "newest" | "oldest";
+export type ArchiveCategoryFilter = "all" | ReceiptCategory;
 
 export type ArchiveReceipt = {
   id: string;
@@ -15,6 +20,7 @@ export type ArchiveReceipt = {
   uploader_name: string | null;
   event_id: string;
   event_name: string;
+  category: ReceiptCategory;
 };
 
 export type ArchiveReceiptDetail = ArchiveReceipt & {
@@ -25,6 +31,7 @@ export type ArchiveQuery = {
   query?: string;
   groupBy: ArchiveGroupBy;
   dateOrder: ArchiveDateOrder;
+  category?: ArchiveCategoryFilter;
   offset?: number;
   limit?: number;
 };
@@ -114,9 +121,13 @@ export async function getArchiveReceiptsAction(
   let request = supabase
     .from("receipts")
     .select(
-      "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, event_id"
+      "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, event_id, category"
     )
     .in("event_id", eventIds);
+
+  if (params.category && params.category !== "all") {
+    request = request.eq("category", params.category);
+  }
 
   if (q) {
     const amount = parseAmount(q);
@@ -177,6 +188,7 @@ export async function getArchiveReceiptsAction(
     uploader_name: r.uploader_name,
     event_id: r.event_id,
     event_name: eventNameById.get(r.event_id) ?? "Akce",
+    category: normalizeReceiptCategory(r.category),
   }));
 
   // Datumový filtr: pokud user zadal CZ datum, nech jen matching purchased_at/created_at den
@@ -226,7 +238,7 @@ export async function getArchiveReceiptDetailAction(
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, event_id, items"
+      "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, event_id, items, category"
     )
     .eq("id", receiptId)
     .maybeSingle();
@@ -255,6 +267,7 @@ export async function getArchiveReceiptDetailAction(
       uploader_name: receipt.uploader_name,
       event_id: receipt.event_id,
       event_name: event.name,
+      category: normalizeReceiptCategory(receipt.category),
       items: receipt.items,
     },
   };

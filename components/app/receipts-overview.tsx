@@ -25,6 +25,7 @@ import {
   findDuplicateReceiptIds,
   type ReceiptDuplicateKey,
 } from "@/lib/receipt-duplicates";
+import type { ReceiptCategory } from "@/lib/receipt-category";
 import { normalizeReceiptItems, type ReceiptItem } from "@/lib/types/database";
 import { ReceiptForm } from "@/components/app/receipt-form";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,43 @@ function formatDateTime(iso: string) {
   return formatDateTimeInPrague(iso);
 }
 
+const COPY: Record<
+  ReceiptCategory,
+  {
+    addTitle: string;
+    addDescription: string;
+    totalLabel: string;
+    empty: string;
+    editTitle: string;
+    detail: string;
+    deleteLabel: string;
+    deleteConfirm: string;
+  }
+> = {
+  expense: {
+    addTitle: "Přidat doklad",
+    addDescription:
+      "Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní dodavatele a částku.",
+    totalLabel: "Zobrazená útrata",
+    empty: "Zatím žádné doklady. Přidejte první výše.",
+    editTitle: "Upravit doklad",
+    detail: "Detail dokladu",
+    deleteLabel: "Smazat doklad",
+    deleteConfirm: "Opravdu smazat tento doklad?",
+  },
+  tax: {
+    addTitle: "Přidat daň / poplatek",
+    addDescription:
+      "Vyplňte ručně, nebo nahrajte doklad — OCR předvyplní příjemce a částku.",
+    totalLabel: "Daně a poplatky celkem",
+    empty: "Zatím žádné daně ani poplatky. Přidejte první výše.",
+    editTitle: "Upravit daň / poplatek",
+    detail: "Detail daně / poplatku",
+    deleteLabel: "Smazat",
+    deleteConfirm: "Opravdu smazat tuto daň / poplatek?",
+  },
+};
+
 export function ReceiptsOverview({
   receipts,
   companyReceipts: initialCompanyReceipts,
@@ -76,6 +114,7 @@ export function ReceiptsOverview({
   eventActive,
   loadCompanyDuplicates = false,
   showAddForm = false,
+  category = "expense",
 }: {
   receipts: ReceiptRow[];
   /** Doklady pro detekci duplicit (nejprve akce, pak firma). */
@@ -88,7 +127,10 @@ export function ReceiptsOverview({
   loadCompanyDuplicates?: boolean;
   /** Formulář „Přidat doklad“ — hned pod celkovou částkou. */
   showAddForm?: boolean;
+  /** Běžné doklady, nebo daně a poplatky — mění jen texty a ukládanou kategorii. */
+  category?: ReceiptCategory;
 }) {
+  const copy = COPY[category];
   const router = useRouter();
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
@@ -127,14 +169,15 @@ export function ReceiptsOverview({
   const addForm = showAddForm ? (
     <Card>
       <CardHeader>
-        <CardTitle>Přidat doklad</CardTitle>
-        <CardDescription>
-          Vyplňte ručně, nebo nahrajte účtenku — OCR předvyplní dodavatele a
-          částku.
-        </CardDescription>
+        <CardTitle>{copy.addTitle}</CardTitle>
+        <CardDescription>{copy.addDescription}</CardDescription>
       </CardHeader>
       <CardContent>
-        <ReceiptForm eventId={eventId} existingReceipts={companyReceipts} />
+        <ReceiptForm
+          eventId={eventId}
+          existingReceipts={companyReceipts}
+          category={category}
+        />
       </CardContent>
     </Card>
   ) : null;
@@ -241,14 +284,14 @@ export function ReceiptsOverview({
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <p className="text-sm text-muted-foreground">Zobrazená útrata</p>
+          <p className="text-sm text-muted-foreground">{copy.totalLabel}</p>
           <p className="text-3xl font-semibold tracking-tight">
             {formatCzk(0)}
           </p>
         </div>
         {addForm}
         <p className="text-sm text-muted-foreground">
-          Zatím žádné doklady. Přidejte první výše.
+          {copy.empty}
         </p>
       </div>
     );
@@ -258,17 +301,17 @@ export function ReceiptsOverview({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-muted-foreground">Zobrazená útrata</p>
+          <p className="text-sm text-muted-foreground">{copy.totalLabel}</p>
           <p className="text-3xl font-semibold tracking-tight">
             {formatCzk(total)}
           </p>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="vendor-filter" className="text-xs text-muted-foreground">
+          <label htmlFor={`vendor-filter-${category}`} className="text-xs text-muted-foreground">
             Filtr dodavatel
           </label>
           <select
-            id="vendor-filter"
+            id={`vendor-filter-${category}`}
             className="h-8 min-w-44 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             value={vendorFilter}
             onChange={(e) => setVendorFilter(e.target.value)}
@@ -415,7 +458,7 @@ export function ReceiptsOverview({
             editing && canManageSelected ? (
               <>
                 <DialogHeader>
-                  <DialogTitle>Upravit doklad</DialogTitle>
+                  <DialogTitle>{copy.editTitle}</DialogTitle>
                   <DialogDescription>
                     {selected.vendor} · {profileName(selected.profiles)}
                   </DialogDescription>
@@ -423,6 +466,7 @@ export function ReceiptsOverview({
                 <ReceiptForm
                   eventId={eventId}
                   existingReceipts={companyReceipts}
+                  category={category}
                   initialReceipt={{
                     id: selected.id,
                     vendor: selected.vendor,
@@ -461,7 +505,7 @@ export function ReceiptsOverview({
                     ) : null}
                   </DialogTitle>
                   <DialogDescription>
-                    Detail dokladu · {profileName(selected.profiles)}
+                    {copy.detail} · {profileName(selected.profiles)}
                   </DialogDescription>
                 </DialogHeader>
 
@@ -620,7 +664,7 @@ export function ReceiptsOverview({
                         loading={pending}
                         onClick={() => {
                           if (!selected) return;
-                          if (!confirm("Opravdu smazat tento doklad?")) return;
+                          if (!confirm(copy.deleteConfirm)) return;
                           startTransition(async () => {
                             const deletedId = selected.id;
                             const result = await deleteReceiptAction(
@@ -640,7 +684,7 @@ export function ReceiptsOverview({
                         }}
                       >
                         <Trash2 />
-                        Smazat doklad
+                        {copy.deleteLabel}
                       </Button>
                     </>
                   ) : null}

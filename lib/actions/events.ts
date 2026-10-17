@@ -16,6 +16,7 @@ import {
   normalizeSettlementSummary,
 } from "@/lib/settlement";
 import { datetimeLocalPragueToIso } from "@/lib/datetime-prague";
+import { normalizeReceiptCategory } from "@/lib/receipt-category";
 import {
   createServiceClient,
   storagePathFromPublicUrl,
@@ -156,6 +157,7 @@ export async function createReceiptAction(
     items: parsed.items as Json | null,
     image_url: parsed.imageUrl,
     purchased_at: parsed.purchasedAt ?? new Date().toISOString(),
+    category: normalizeReceiptCategory(formData.get("category")),
   });
 
   if (error) {
@@ -163,7 +165,12 @@ export async function createReceiptAction(
   }
 
   revalidatePath(`/events/${eventId}`);
-  return { success: "Doklad byl uložen." };
+  return {
+    success:
+      normalizeReceiptCategory(formData.get("category")) === "tax"
+        ? "Daň / poplatek byl uložen."
+        : "Doklad byl uložen.",
+  };
 }
 
 export async function updateReceiptAction(

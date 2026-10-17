@@ -14,6 +14,7 @@ import Link from "next/link";
 import {
   getArchiveReceiptDetailAction,
   getArchiveReceiptsAction,
+  type ArchiveCategoryFilter,
   type ArchiveDateOrder,
   type ArchiveGroupBy,
   type ArchiveReceipt,
@@ -30,6 +31,7 @@ import {
   itemsSum,
 } from "@/lib/settlement";
 import { normalizeReceiptItems } from "@/lib/types/database";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -123,6 +125,7 @@ function buildGroups(
 export function ReceiptArchive() {
   const [groupBy, setGroupBy] = useState<ArchiveGroupBy>("date");
   const [dateOrder, setDateOrder] = useState<ArchiveDateOrder>("newest");
+  const [category, setCategory] = useState<ArchiveCategoryFilter>("all");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
 
@@ -147,6 +150,7 @@ export function ReceiptArchive() {
         query: deferredQuery,
         groupBy,
         dateOrder,
+        category,
         offset: opts.offset,
       });
 
@@ -163,7 +167,7 @@ export function ReceiptArchive() {
       );
       setHasMore(result.hasMore);
     },
-    [deferredQuery, groupBy, dateOrder]
+    [deferredQuery, groupBy, dateOrder, category]
   );
 
   useEffect(() => {
@@ -290,6 +294,26 @@ export function ReceiptArchive() {
             </Button>
           ) : null}
         </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {(
+            [
+              ["all", "Vše"],
+              ["expense", "Doklady"],
+              ["tax", "Daně a poplatky"],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={category === value ? "secondary" : "outline"}
+              onClick={() => setCategory(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {error ? (
@@ -370,7 +394,14 @@ export function ReceiptArchive() {
                             className="flex w-full flex-wrap items-baseline justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/30"
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-medium">{r.vendor}</p>
+                              <p className="flex min-w-0 items-center gap-2 font-medium">
+                                <span className="truncate">{r.vendor}</span>
+                                {r.category === "tax" ? (
+                                  <Badge variant="outline" className="shrink-0">
+                                    daň / poplatek
+                                  </Badge>
+                                ) : null}
+                              </p>
                               <p className="text-xs text-muted-foreground">
                                 {formatReceiptWhen(r)}
                                 {" · "}
@@ -430,7 +461,10 @@ export function ReceiptArchive() {
               <DialogHeader>
                 <DialogTitle>{detail.vendor}</DialogTitle>
                 <DialogDescription>
-                  Detail dokladu · {uploader}
+                  {detail.category === "tax"
+                    ? "Daň / poplatek"
+                    : "Detail dokladu"}{" "}
+                  · {uploader}
                 </DialogDescription>
               </DialogHeader>
 

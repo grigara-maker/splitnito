@@ -24,6 +24,7 @@ import {
   findMatchingReceipt,
   type ReceiptDuplicateKey,
 } from "@/lib/receipt-duplicates";
+import type { ReceiptCategory } from "@/lib/receipt-category";
 import { createClient } from "@/lib/supabase/client";
 import { itemsSum } from "@/lib/settlement";
 import type { ReceiptItem } from "@/lib/types/database";
@@ -222,12 +223,15 @@ export function ReceiptForm({
   initialReceipt,
   existingReceipts = [],
   onSaved,
+  category = "expense",
 }: {
   eventId: string;
   initialReceipt?: ReceiptFormInitial;
   /** Doklady akce pro detekci duplicit (dodavatel + částka + datum). */
   existingReceipts?: ReceiptDuplicateKey[];
   onSaved?: () => void;
+  /** Běžný doklad, nebo daň / poplatek (vlastní sekce v akci). */
+  category?: ReceiptCategory;
 }) {
   const router = useRouter();
   const isEdit = Boolean(initialReceipt);
@@ -470,6 +474,7 @@ export function ReceiptForm({
   return (
     <form ref={formRef} action={formAction} className="flex min-w-0 flex-col gap-4">
       <input type="hidden" name="eventId" value={eventId} />
+      <input type="hidden" name="category" value={category} />
       {initialReceipt ? (
         <input type="hidden" name="receiptId" value={initialReceipt.id} />
       ) : null}
@@ -647,7 +652,11 @@ export function ReceiptForm({
 
       {/* Uložení počká na dokončený upload, ať se doklad neuloží bez fotky. */}
       <Button type="submit" loading={pending || ocrLoading || imageUploading}>
-        {isEdit ? "Uložit změny" : "Uložit doklad"}
+        {isEdit
+          ? "Uložit změny"
+          : category === "tax"
+            ? "Uložit daň / poplatek"
+            : "Uložit doklad"}
       </Button>
     </form>
   );

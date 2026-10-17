@@ -19,6 +19,7 @@ import {
   normalizeSettlementSummary,
   type SettlementSummary,
 } from "@/lib/settlement";
+import { normalizeReceiptCategory } from "@/lib/receipt-category";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function EventPage({
@@ -47,7 +48,7 @@ export default async function EventPage({
       supabase
         .from("receipts")
         .select(
-          "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, items"
+          "id, vendor, total_amount, created_at, purchased_at, user_id, uploader_name, items, category"
         )
         .eq("event_id", id)
         .order("created_at", { ascending: false }),
@@ -88,6 +89,7 @@ export default async function EventPage({
     user_id: r.user_id,
     uploader_name: r.uploader_name,
     items: r.items,
+    category: normalizeReceiptCategory(r.category),
     image_url: null as string | null,
     profiles: { name: resolveName(r.uploader_name) },
   }));
@@ -101,6 +103,9 @@ export default async function EventPage({
     uploader_name: r.uploader_name,
     profiles: { name: resolveName(r.uploader_name) },
   }));
+
+  const expenseReceipts = receipts.filter((r) => r.category === "expense");
+  const taxReceipts = receipts.filter((r) => r.category === "tax");
 
   // Okamžité duplicity v rámci této akce; firma se doplní na klientu
   const eventReceiptKeys = receipts.map((r) => ({
@@ -151,7 +156,7 @@ export default async function EventPage({
             </Badge>
           </div>
           <p className="mt-1 text-muted-foreground">
-            Přehled dokladů, tržeb a vyúčtování ve Splitnito.
+            Přehled dokladů, daní a poplatků, tržeb a vyúčtování ve Splitnito.
           </p>
         </div>
         <div className="shrink-0 pt-1">
@@ -169,7 +174,7 @@ export default async function EventPage({
           Doklady
         </h2>
         <ReceiptsOverview
-          receipts={receipts}
+          receipts={expenseReceipts}
           companyReceipts={eventReceiptKeys}
           eventId={event.id}
           currentUserId={userId}
@@ -177,6 +182,23 @@ export default async function EventPage({
           eventActive={event.status === "active"}
           loadCompanyDuplicates
           showAddForm={event.status === "active" && !isCompanyAdmin}
+        />
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Daně a poplatky
+        </h2>
+        <ReceiptsOverview
+          receipts={taxReceipts}
+          companyReceipts={eventReceiptKeys}
+          eventId={event.id}
+          currentUserId={userId}
+          isCompanyAdmin={isCompanyAdmin}
+          eventActive={event.status === "active"}
+          loadCompanyDuplicates
+          showAddForm={event.status === "active" && !isCompanyAdmin}
+          category="tax"
         />
       </section>
 

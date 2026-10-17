@@ -122,6 +122,7 @@ export type Database = {
           items: Json | null;
           image_url: string | null;
           purchased_at: string | null;
+          category: "expense" | "tax";
           created_at: string;
         };
         Insert: {
@@ -134,6 +135,7 @@ export type Database = {
           items?: Json | null;
           image_url?: string | null;
           purchased_at?: string | null;
+          category?: "expense" | "tax";
           created_at?: string;
         };
         Update: {
@@ -146,6 +148,7 @@ export type Database = {
           items?: Json | null;
           image_url?: string | null;
           purchased_at?: string | null;
+          category?: "expense" | "tax";
           created_at?: string;
         };
         Relationships: [
