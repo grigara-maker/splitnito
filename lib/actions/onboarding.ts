@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 
 import { isValidIban, normalizeIban } from "@/lib/iban";
+import { verifyIco } from "@/lib/ico";
+import { recordLegalSetup, TERMS_REQUIRED_ERROR } from "@/lib/legal/record";
 import { createClient } from "@/lib/supabase/server";
 import type { AuthState } from "@/lib/actions/auth";
 
@@ -15,13 +17,22 @@ export async function completeOnboardingAction(
   const inviteCode = String(formData.get("inviteCode") ?? "").trim();
   const memberName = String(formData.get("name") ?? "").trim();
   const ibanRaw = String(formData.get("iban") ?? "").trim();
+  const icoRaw = String(formData.get("ico") ?? "").trim();
+  const acceptTerms = formData.get("acceptTerms") === "on";
 
+  let ico: string | null = null;
   if (accountType === "company") {
     if (!companyName) return { error: "Zadejte název firmy." };
+    const verification = await verifyIco(icoRaw);
+    if (!verification.ok) return { error: verification.error };
+    ico = verification.ico;
   } else {
     if (!memberName) return { error: "Jméno je povinné." };
     if (!inviteCode) return { error: "Zadejte kód firmy." };
   }
+
+  if (!acceptTerms) return { error: TERMS_REQUIRED_ERROR };
+  const termsAcceptedAt = new Date().toISOString();
 
   let iban: string | null = null;
   if (accountType === "member" && ibanRaw) {
@@ -54,6 +65,14 @@ export async function completeOnboardingAction(
   if (error) {
     return { error: error.message };
   }
+
+  const legalError = await recordLegalSetup(
+    supabase,
+    user.id,
+    ico,
+    termsAcceptedAt
+  );
+  if (legalError) return { error: legalError };
 
   redirect("/dashboard");
 }

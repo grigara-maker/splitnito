@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CompanyIcoNote, TermsConsent } from "@/components/legal/terms-consent";
 
 const initial: AuthState = {};
 
@@ -62,6 +63,19 @@ export function RegisterForm({
                   placeholder="Moje s.r.o."
                   required={accountType === "company"}
                 />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="ico">IČO</Label>
+                <Input
+                  id="ico"
+                  name="ico"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={10}
+                  placeholder="12345678"
+                  required={accountType === "company"}
+                />
+                <CompanyIcoNote />
               </div>
             </TabsContent>
 
@@ -127,6 +141,8 @@ export function RegisterForm({
               placeholder="min. 6 znaků"
             />
           </div>
+
+          <TermsConsent />
 
           {state.error ? (
             <p className="text-sm text-destructive" role="alert">

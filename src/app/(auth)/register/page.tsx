@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { RegisterForm } from "@/components/auth/register-form";
+import { LegalFooter } from "@/components/legal/legal-footer";
 
 export default async function RegisterPage({
   searchParams,
@@ -24,6 +25,7 @@ export default async function RegisterPage({
       <div className="relative z-10 flex w-full justify-center">
         <RegisterForm defaultInvite={invite} />
       </div>
+      <LegalFooter className="relative z-10 mt-10 w-full border-0" />
     </div>
   );
 }

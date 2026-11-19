@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isValidIban, normalizeIban } from "@/lib/iban";
+import { verifyIco } from "@/lib/ico";
+import { TERMS_VERSION } from "@/lib/legal/operator";
+import { recordLegalSetup, TERMS_REQUIRED_ERROR } from "@/lib/legal/record";
 import {
   createServiceClient,
   storagePathFromPublicUrl,
@@ -48,6 +51,8 @@ export async function registerAction(
   const inviteCode = String(formData.get("inviteCode") ?? "").trim();
   const memberName = String(formData.get("name") ?? "").trim();
   const ibanRaw = String(formData.get("iban") ?? "").trim();
+  const icoRaw = String(formData.get("ico") ?? "").trim();
+  const acceptTerms = formData.get("acceptTerms") === "on";
 
   if (!email || !password) {
     return { error: "Vyplňte e-mail a heslo." };
@@ -56,14 +61,23 @@ export async function registerAction(
     return { error: "Heslo musí mít alespoň 6 znaků." };
   }
 
+  let ico: string | null = null;
   if (accountType === "company") {
     if (!companyName) return { error: "Zadejte název firmy." };
+    const verification = await verifyIco(icoRaw);
+    if (!verification.ok) return { error: verification.error };
+    ico = verification.ico;
   } else {
     if (!memberName) return { error: "Zadejte své jméno." };
     if (!inviteCode) {
       return { error: "Zadejte kód firmy, ke které se připojujete." };
     }
   }
+
+  if (!acceptTerms) {
+    return { error: TERMS_REQUIRED_ERROR };
+  }
+  const termsAcceptedAt = new Date().toISOString();
 
   let iban: string | null = null;
   if (accountType === "member" && ibanRaw) {
@@ -82,7 +96,12 @@ export async function registerAction(
     email,
     password,
     options: {
-      data: { name: displayName, accountType },
+      data: {
+        name: displayName,
+        accountType,
+        terms_version: TERMS_VERSION,
+        terms_accepted_at: termsAcceptedAt,
+      },
     },
   });
 
@@ -122,6 +141,14 @@ export async function registerAction(
     }
     return { error: message };
   }
+
+  const legalError = await recordLegalSetup(
+    supabase,
+    signUpData.user.id,
+    ico,
+    termsAcceptedAt
+  );
+  if (legalError) return { error: legalError };
 
   redirect("/dashboard");
 }
@@ -202,6 +229,10 @@ export async function updateCompanyNameAction(
   if (!companyName) {
     return { error: "Název firmy je povinný." };
   }
+  const verification = await verifyIco(String(formData.get("ico") ?? ""));
+  if (!verification.ok) {
+    return { error: verification.error };
+  }
 
   const supabase = await createClient();
   const {
@@ -224,10 +255,16 @@ export async function updateCompanyNameAction(
 
   const { error: companyError } = await supabase
     .from("companies")
-    .update({ name: companyName })
+    .update({ name: companyName, ico: verification.ico })
     .eq("id", profile.company_id);
 
   if (companyError) {
+    if (/column .*ico|'ico' column/i.test(companyError.message)) {
+      return {
+        error:
+          "V Supabase chybí sloupec pro IČO. Spusťte SQL supabase/migration_legal_ico.sql.",
+      };
+    }
     return { error: companyError.message };
   }
 
@@ -244,7 +281,7 @@ export async function updateCompanyNameAction(
   revalidatePath("/company");
   revalidatePath("/profile");
   revalidatePath("/dashboard");
-  return { success: "Název firmy byl uložen." };
+  return { success: "Údaje firmy byly uloženy." };
 }
 
 export async function removeMemberAction(
