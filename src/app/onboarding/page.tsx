@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { OnboardingForm } from "@/components/app/onboarding-form";
+import { LegalFooter } from "@/components/legal/legal-footer";
 import {
   Card,
   CardContent,
@@ -80,6 +81,7 @@ export default async function OnboardingPage({
           </CardContent>
         </Card>
       </div>
+      <LegalFooter className="relative z-10 mt-10 w-full border-0" />
     </div>
   );
 }

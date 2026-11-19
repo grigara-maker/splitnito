@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { LegalFooter } from "@/components/legal/legal-footer";
 import { cn } from "@/lib/utils";
 
 export default function Home() {
@@ -156,6 +157,7 @@ export default function Home() {
           </CardContent>
         </Card>
       </main>
+      <LegalFooter className="relative z-10 border-border/40" />
     </div>
   );
 }

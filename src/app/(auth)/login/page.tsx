@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/login-form";
+import { LegalFooter } from "@/components/legal/legal-footer";
 
 export default function LoginPage() {
   return (
@@ -17,6 +18,7 @@ export default function LoginPage() {
       <div className="relative z-10 flex w-full justify-center">
         <LoginForm />
       </div>
+      <LegalFooter className="relative z-10 mt-10 w-full border-0" />
     </div>
   );
 }

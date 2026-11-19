@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import { AppNav } from "@/components/app/app-nav";
+import { LegalFooter } from "@/components/legal/legal-footer";
 import { getAppSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,16 +49,7 @@ export default async function AppLayout({
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
         {children}
       </main>
-      <footer className="border-t border-border/60 py-4 text-center text-xs text-muted-foreground">
-        <Link
-          href="/dashboard"
-          className="font-heading font-medium text-foreground"
-        >
-          Splitnito
-        </Link>
-        {" · "}
-        chytré vyúčtování firemních nákladů
-      </footer>
+      <LegalFooter />
     </div>
   );
 }

@@ -523,6 +523,10 @@ export function ReceiptForm({
             <span className="text-xs text-muted-foreground">Obrázek nahrán</span>
           ) : null}
         </div>
+        <p className="text-xs text-muted-foreground">
+          Doklad automaticky přečte AI (Google Gemini). Výsledek před uložením
+          zkontrolujte, případně vyplňte ručně.
+        </p>
         {uploadError ? (
           <p className="text-sm text-destructive">{uploadError}</p>
         ) : null}

@@ -33,7 +33,7 @@ export default async function CompanyPage() {
 
   const { data: company } = await supabase
     .from("companies")
-    .select("name, invite_code")
+    .select("*")
     .eq("id", profile.company_id)
     .single();
 
@@ -65,7 +65,10 @@ export default async function CompanyPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <CompanyNameForm companyName={company?.name ?? ""} />
+          <CompanyNameForm
+            companyName={company?.name ?? ""}
+            ico={company?.ico ?? null}
+          />
           <div>
             <p className="text-sm text-muted-foreground">Kód firmy</p>
             <p className="mt-1 font-mono text-2xl tracking-wider">

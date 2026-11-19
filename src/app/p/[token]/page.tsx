@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PublicPaymentCard } from "@/components/app/public-payment-card";
+import { LegalFooter } from "@/components/legal/legal-footer";
 import { getPublicPaymentAction } from "@/lib/actions/public-payment";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export default async function PublicPaymentPage({
           Splitnito — chytré vyúčtování firemních nákladů.
         </p>
       </div>
+      <LegalFooter className="mt-8 w-full border-0" />
     </main>
   );
 }

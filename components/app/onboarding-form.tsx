@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CompanyIcoNote, TermsConsent } from "@/components/legal/terms-consent";
 
 const initial: AuthState = {};
 
@@ -66,6 +67,19 @@ export function OnboardingForm({
               defaultValue={defaultName ?? ""}
             />
           </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ico">IČO</Label>
+            <Input
+              id="ico"
+              name="ico"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={10}
+              placeholder="12345678"
+              required={accountType === "company"}
+            />
+            <CompanyIcoNote />
+          </div>
         </TabsContent>
 
         <TabsContent value="member" className="mt-4 space-y-4">
@@ -106,6 +120,8 @@ export function OnboardingForm({
           </div>
         </TabsContent>
       </Tabs>
+
+      <TermsConsent />
 
       {state.error ? (
         <p className="text-sm text-destructive" role="alert">

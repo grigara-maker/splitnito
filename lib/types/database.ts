@@ -19,18 +19,21 @@ export type Database = {
           id: string;
           name: string;
           invite_code: string;
+          ico: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
           invite_code?: string;
+          ico?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
           invite_code?: string;
+          ico?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -44,6 +47,8 @@ export type Database = {
           email: string | null;
           role: "company" | "member";
           daily_email_reminders: boolean;
+          terms_version: string | null;
+          terms_accepted_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -54,6 +59,8 @@ export type Database = {
           email?: string | null;
           role?: "company" | "member";
           daily_email_reminders?: boolean;
+          terms_version?: string | null;
+          terms_accepted_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -64,6 +71,8 @@ export type Database = {
           email?: string | null;
           role?: "company" | "member";
           daily_email_reminders?: boolean;
+          terms_version?: string | null;
+          terms_accepted_at?: string | null;
           created_at?: string;
         };
         Relationships: [
